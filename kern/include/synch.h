@@ -70,13 +70,14 @@ void V(struct semaphore *);
  * when the lock is destroyed, no thread should be holding it.
  *
  * The name field is for easier debugging. A copy of the name is
- * (should be) made internally.
+ * (should be) made interally.
  */
 struct lock {
         char *lk_name;
+	struct wchan *lk_wchan;
+	struct spinlock lk_lock;
+	struct thread *lk_holder;
         HANGMAN_LOCKABLE(lk_hangman);   /* Deadlock detector hook. */
-        // add what you need here
-        // (don't forget to mark things volatile as needed)
 };
 
 struct lock *lock_create(const char *name);
@@ -114,8 +115,8 @@ bool lock_do_i_hold(struct lock *);
 
 struct cv {
         char *cv_name;
-        // add what you need here
-        // (don't forget to mark things volatile as needed)
+	struct wchan *cv_wchan;
+	struct spinlock cv_lock;
 };
 
 struct cv *cv_create(const char *name);
