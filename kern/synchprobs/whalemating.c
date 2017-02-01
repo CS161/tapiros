@@ -28,6 +28,35 @@
  */
 
 /*
+ * The Classic CS161 Whale Mating Problem
+ *
+ * You have been hired by the New England Aquarium's research division
+ * to help find a way to increase the whale population. Because there
+ * are not enough of them, the whales are having synchronization
+ * problems in finding a mate. The trick is that in order to have
+ * children, three whales are needed; one male, one female, and one to
+ * play matchmaker - literally, to push the other two whales together
+ * (We're not making this up!).
+ *
+ * Your job is to write the three procedures male(), female(), and
+ * matchmaker().  Each whale is represented by a separate thread. A
+ * male whale calls male(), which waits until there is a waiting
+ * female and matchmaker; similarly, a female whale must wait until a
+ * male whale and matchmaker are present. Once all three are present,
+ * all three return.
+ * 
+ * The test driver for this program is in the file whalemating.c. It
+ * forks thirty threads, and has ten of them invoke male(), ten of
+ * them invoke female(), and ten of them invoke matchmaker(). Stub
+ * routines, which do nothing but print diagnostic messages, are
+ * provided for these three functions. Your job will be to
+ * re-implement these functions so that they solve the synchronization
+ * problem described above. Each whale (thread) should print out a
+ * message when it begins, identifying itself, and then again when it
+ * has successfully mated (or assisted a couple in mating).
+ */
+
+/*
  * Driver code for whale mating problem
  */
 #include <types.h>
