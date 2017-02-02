@@ -70,7 +70,7 @@ void V(struct semaphore *);
  * when the lock is destroyed, no thread should be holding it.
  *
  * The name field is for easier debugging. A copy of the name is
- * (should be) made interally.
+ * (should be) made internally.
  */
 struct lock {
         char *lk_name;

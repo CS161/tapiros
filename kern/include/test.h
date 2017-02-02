@@ -84,6 +84,13 @@ int semu20(int, char **);
 int semu21(int, char **);
 int semu22(int, char **);
 
+/* lock and cv unit tests */
+int ut1(int, char **);
+int ut2(int, char **);
+int ut3(int, char **);
+int ut4(int, char **);
+int ut5(int, char **);
+
 /* filesystem tests */
 int fstest(int, char **);
 int readstress(int, char **);

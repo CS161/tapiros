@@ -276,7 +276,7 @@ cv_create(const char *name)
 }
 
 void
-cv_destroy(struct cv *cv)
+cv_destroy(struct cv *cv) {
 
 	KASSERT(cv != NULL);
 
@@ -292,6 +292,7 @@ cv_wait(struct cv *cv, struct lock *lock)
 {
 	KASSERT(cv != NULL);
 	KASSERT(lock != NULL);
+	KASSERT(curthread->t_in_interrupt == false);
 
 	spinlock_acquire(&cv->cv_lock);
 

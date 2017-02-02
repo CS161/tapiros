@@ -141,7 +141,7 @@ spinlock_not_held(struct spinlock *splk)
 }
 
 ////////////////////////////////////////////////////////////
-// tests
+// semaphore tests
 
 /*
  * 1. After a successful sem_create:
@@ -816,5 +816,149 @@ semu22(int nargs, char **args)
 	kprintf("This should assert that the semaphore isn't null.\n");
 	P(NULL);
 	panic("semu22: P tolerated null semaphore\n");
+	return 0;
+}
+
+////////////////////////////////////////////////////////////
+// lock and cv tests
+
+/*
+ * 1. A thread will error if it tries to acquire a lock it already holds.
+ */
+int
+ut1(int nargs, char **args)
+{
+	struct lock *lock;
+	const char *name = NAMESTRING;
+
+	(void)nargs; (void)args;
+
+	lock = lock_create(name);
+	if (lock == NULL) {
+		panic("ut1: whoops: lock_create failed\n");
+	}
+	lock_acquire(lock);
+	kprintf("Should panic: lock_acquire: You already hold lock some-silly-name\n");
+	lock_acquire(lock);
+
+	panic("ut1: lock didn't error when it was double acquired\n");
+	return 0;
+}
+
+/*
+ * 2. Passing a null lock to a lock_destroy will error.
+ */
+int
+ut2(int nargs, char **args)
+{
+	(void)nargs; (void)args;
+	
+	struct lock *naughty = NULL;	
+	kprintf("Should fail assertion: lock != NULL\n");
+	lock_destroy(naughty);
+
+	panic("ut2: lock didn't error when it destroyed NULL\n");
+	return 0;
+}
+
+/*
+ * 3. A thread will error if it releases a lock it doesn’t hold.
+ */
+int
+ut3(int nargs, char **args)
+{
+	struct lock *lock;
+	const char *name = NAMESTRING;
+
+	(void)nargs; (void)args;
+
+	lock = lock_create(name);
+	if (lock == NULL) {
+		panic("ut3: whoops: lock_create failed\n");
+	}
+	kprintf("Should panic: lock_release: You don't hold lock some-silly-name\n");
+	lock_release(lock);
+
+	panic("ut3: lock didn't error when it was released without ownership\n");
+	return 0;
+}
+
+/*
+ * Helper function for ut4.
+ */
+static
+void
+ut4helper(void* vcv, unsigned long ullock)
+{
+	struct cv *cv = vcv;
+	//struct lock *lock = (struct lock *) ullock;
+	lock_acquire((struct lock*)ullock);
+
+	kprintf("Should fail assertion: threadlist_isempty(tl)\n");
+	cv_destroy(cv);
+
+	panic("thread: no error when cv with non-empty wchan was destroyed\n");
+}
+
+/*
+ * 4. A CV will error if destroyed while its wait channel isn’t empty.
+ */
+int
+ut4(int nargs, char **args)
+{
+	struct cv *cv;
+	struct lock *lock;
+	const char *name = NAMESTRING;
+
+	(void)nargs; (void)args;
+
+	cv = cv_create(name);
+	if (cv == NULL) {
+		panic("ut4: whoops: cv_create failed\n");
+	}
+
+	lock = lock_create(name);
+	if (lock == NULL) {
+		panic("ut4: whoops: lock_create failed\n");
+	}
+	lock_acquire(lock);
+
+	int result;
+	result = thread_fork("ut4helper", NULL, ut4helper, (void*)cv, (unsigned long)lock);
+	if (result) {
+		panic("ut4: thread_fork failed\n");
+	}
+	cv_wait(cv, lock);
+
+	panic("ut4: thread was unslept when cv was destroyed\n");
+	return 0;
+}
+
+/*
+ * 5. A CV will error if a thread tries to signal using a lock it doesn’t
+ * own.
+ */
+int
+ut5(int nargs, char **args)
+{
+	struct cv *cv;	
+	struct lock *lock;
+	const char *name = NAMESTRING;
+
+	(void)nargs; (void)args;
+
+	cv = cv_create(name);
+	if (cv == NULL) {
+		panic("ut5: whoops: cv_create failed\n");
+	}
+
+	lock = lock_create(name);
+	if (lock == NULL) {
+		panic("ut5: whoops: lock_create failed\n");
+	}
+	kprintf("Should panic: cv_signal: You don't hold lock some-silly-name\n");
+	cv_signal(cv, lock);
+
+	panic("ut5: CV didn't error when it signaled without owning the lock\n");
 	return 0;
 }

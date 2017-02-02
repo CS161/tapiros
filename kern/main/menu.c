@@ -623,7 +623,7 @@ static const char *mainmenu[] = {
 #if OPT_SYNCHPROBS
 	"[sp1] Whale Mating                  ",
 	"[sp2] Elves                         ",
-	"[sp3] Airballoon                    ",
+	"[ut1-5] ASST1 UNIT TESTING          ",
 #endif
 	"[kh] Kernel heap stats              ",
 	"[khgen] Next kernel heap generation ",
@@ -734,6 +734,13 @@ static struct {
 	{ "semu20",	semu20 },
 	{ "semu21",	semu21 },
 	{ "semu22",	semu22 },
+
+	/* lock and cv tests */
+	{ "ut1", ut1 },
+	{ "ut2", ut2 },
+	{ "ut3", ut3 },
+	{ "ut4", ut4 },
+	{ "ut5", ut5 },
 
 	/* file system assignment tests */
 	{ "fs1",	fstest },

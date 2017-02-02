@@ -55,7 +55,7 @@ sys161.conf is automatically applied when sys161 boots
 
 8 ---------------------------------------------------------------------------
 
-STILL NEED ANSWER
+array.h's preprocessor hackery basically makes it polymorphic. One might use array.h when making an array of any type of variable that can't easily be represented with a traditional (faster) array of fixed size.
 
 9 ---------------------------------------------------------------------------
 
@@ -79,7 +79,35 @@ a b c d
 
 11 --------------------------------------------------------------------------
 
-STILL NEED ANSWER
+start.S
+Sets up stack frame: strcpys bootstring into _end, uses strlen to find where to add the null terminator, adds a page for the stack and starts the kernel stack, puts a stack frame on it that follows the specs at the top of start.S
+Uses memmove to copy the code for exception handlers (mips_utlb_handler and mips_general_handler)
+Calls mips_flushicache to make sure instructions are up to date
+Calls tlb_reset to start MMU stuff
+Set some initial flags/0s/NULLs
+Call kmain
+
+main.c
+kmain() calls boot()
+kprintfs separately: newline, OS version, harvard copyright, newline, group name, newline
+Calls ram_bootstrap() (in kern>arch>mips>vm>ram.c) for RAM setup
+Calls more bootstraps to initialize things, mostly found in kern>include: proc_bootstrap() for processes, thread_bootstrap() for threads, hardclock_bootstrap() for the hardware clock, vfs_bootstrap() for the virtual file system
+kheap_nextgeneration() to change the label in kmalloc.c
+kprintf device probe message
+mainbus_bootstrap() detects attached devices and prints them out
+pseudoconfig() seems to do nothing, at least in ASST1
+kprintf a newline
+kheap_nextgeneration() again
+vm_bootstrap() for virtual memory, kprintf_bootstrap for kprintf (creates a spinlock so later prints with multiple threads are active can be atomic)
+thread_start_cpus()
+buffer_bootstrap() for buffer cache
+kheap_nextgeneration() again
+boot() finishes running after some KASSERTs
+once boot() returns to kmain(), it forks the menu thread with menu(arguments);
+
+menu.c
+menu() -> menu_execute()
+etc. (as I understand it, the scope of this question ends at the beginning of the menu)
 
 12 --------------------------------------------------------------------------
 
@@ -117,20 +145,24 @@ V() acquires the spinlock and increments sem_count, then wakes up one thread on 
 
 18 --------------------------------------------------------------------------
 
-lock_do_i_hold() is actually useful for error checking, but lock_get_holder() doesn’t really simplify anything. Since these locks are only usable at the kernel level, you could just use lock->lk_holder to get the holder instead (at least in my implementation). 
+lock_do_i_hold() is actually useful for error checking, but lock_get_holder() doesn’t really simplify anything. Since these locks are only usable at the kernel level, you could just use lock->lk_holder to get the holder instead (at least in my implementation). I can't even think of a situation where you'd need to know which other specific thread owns a lock.
 
 This is also a sort of non-answer, but there is no spinlock_get_holder(), so it would be odd for there to be one for regular locks.
 
 Unit Testing ----------------------------------------------------------------
 
-1. A properly implemented lock will
-2. A properly implemented lock will
-3. A properly implemented lock will
-4. A properly implemented lock will
-5. A properly implemented lock will
+Locks:
 
-1. A properly implemented CV will
-2. A properly implemented CV will
-3. A properly implemented CV will
-4. A properly implemented CV will
-5. A properly implemented CV will
+1. A thread will error if it tries to acquire a lock it already holds.
+2. Passing a null lock to a lock_destroy will error.
+3. A thread will error if it releases a lock it doesn’t hold.
+4. A thread will be told it holds a lock after it successfully acquires it.
+5. After initializing a lock with name “NAME”, lk_name will be “NAME”, lk_wchan will be initialized, lk_lock will be initialized, and lk_holder will be NULL. 
+
+CVs:
+
+1. A CV will error if destroyed while its wait channel isn’t empty.
+2. A CV will error if a thread tries to signal using a lock it doesn’t own.
+3. Broadcasting to a CV will eventually wake up all sleeping threads.
+4. When a thread wakes up from cv_wait, it holds the lock it passed to it.
+5. An interrupt handler will error if it tries to cv_wait.
