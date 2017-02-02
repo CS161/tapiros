@@ -277,7 +277,7 @@ cv_create(const char *name)
 
 void
 cv_destroy(struct cv *cv)
-{
+
 	KASSERT(cv != NULL);
 
 	spinlock_cleanup(&cv->cv_lock);
