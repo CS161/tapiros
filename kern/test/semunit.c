@@ -891,13 +891,12 @@ void
 ut4helper(void* vcv, unsigned long ullock)
 {
 	struct cv *cv = vcv;
-	//struct lock *lock = (struct lock *) ullock;
 	lock_acquire((struct lock*)ullock);
 
 	kprintf("Should fail assertion: threadlist_isempty(tl)\n");
 	cv_destroy(cv);
 
-	panic("thread: no error when cv with non-empty wchan was destroyed\n");
+	panic("ut4: no error when cv with non-empty wchan was destroyed\n");
 }
 
 /*

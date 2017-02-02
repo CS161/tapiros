@@ -179,6 +179,7 @@ lock_destroy(struct lock *lock)
 {
 	KASSERT(lock != NULL);
 
+	/* wchan_cleanup will assert if anyone's waiting on it */
 	spinlock_cleanup(&lock->lk_lock);
 	wchan_destroy(lock->lk_wchan);
 
@@ -192,10 +193,12 @@ lock_acquire(struct lock *lock)
 	KASSERT(lock != NULL);
 	KASSERT(curthread->t_in_interrupt == false);
 	
-	spinlock_acquire(&lock->lk_lock);
+	spinlock_acquire(&lock->lk_lock); // protects lk_wchan and lk_holder
 	HANGMAN_WAIT(&curthread->t_hangman, &lock->lk_hangman);
 
 	if(lock->lk_holder == curthread) {
+		// I check explicitly instead of using lock_do_i_hold to avoid
+		// redundant spinlock usage
 		panic("lock_acquire: You already hold lock %s\n",lock->lk_name);
 	}
 
@@ -219,11 +222,10 @@ lock_release(struct lock *lock)
 	if(!(lock->lk_holder == curthread)) {
 		panic("lock_release: You don't hold lock %s\n",lock->lk_name);
 	}
-
 	lock->lk_holder = NULL;
     wchan_wakeone(lock->lk_wchan, &lock->lk_lock);
-	HANGMAN_RELEASE(&curthread->t_hangman, &lock->lk_hangman);
 
+	HANGMAN_RELEASE(&curthread->t_hangman, &lock->lk_hangman);
 	spinlock_release(&lock->lk_lock);
 }
 
@@ -236,6 +238,8 @@ lock_do_i_hold(struct lock *lock)
 	spinlock_acquire(&lock->lk_lock);
 
 	bool result = (lock->lk_holder == curthread);
+	// spinlock_do_i_hold assumes that the analogous read is atomic enough
+	// not to cause problems, but I didn't want to risk it
 
 	spinlock_release(&lock->lk_lock);
 
@@ -280,6 +284,7 @@ cv_destroy(struct cv *cv) {
 
 	KASSERT(cv != NULL);
 
+	/* wchan_cleanup will assert if anyone's waiting on it */
 	spinlock_cleanup(&cv->cv_lock);
 	wchan_destroy(cv->cv_wchan);
 
@@ -294,7 +299,7 @@ cv_wait(struct cv *cv, struct lock *lock)
 	KASSERT(lock != NULL);
 	KASSERT(curthread->t_in_interrupt == false);
 
-	spinlock_acquire(&cv->cv_lock);
+	spinlock_acquire(&cv->cv_lock); // protects cv_wchan
 
 	lock_release(lock); // also checks whether lock is held
 	wchan_sleep(cv->cv_wchan, &cv->cv_lock);
