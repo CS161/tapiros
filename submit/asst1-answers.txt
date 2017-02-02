@@ -10,6 +10,8 @@ If the trap is found to be a system call (on line 216), we call the syscall hand
 
 If it’s found to be a virtual memory fault (on line 233), vm_fault(...) is called, which goes to ~/cs161/os161/kern/arch/mips/vm/dumbvm.c .
 
+If it's something else, it panics.
+
 2 ---------------------------------------------------------------------------
 
 A system call is called in ~/cs161/os161/userland/lib/libc/arch/mips/syscalls-mips.S on line 84 with the syscall assembly instruction, with the call number (as defined in ~/cs161/os161/kern/include/kern/syscall.h) stored in the v0 register. This triggers the trap described in question 1.
@@ -19,7 +21,6 @@ A system call is called in ~/cs161/os161/userland/lib/libc/arch/mips/syscalls-mi
 The kernel may want to use some libc functions out of convenience, like the str/mem functions, atoi, and regular printf (as opposed to kprintf), especially in definitions of other functions.
 
 4 ---------------------------------------------------------------------------
-
 
 Top-level configure configures things like hardware platform and machine type, optimize/debug flags, root location, Python interpreter location, and compiler. So, if you want to change/rearrange the file structure of the aforementioned things (or if they are moved around), you’d have to rerun configure.
 
@@ -71,6 +72,7 @@ In order to add a system call, you need to:
 - Check that the syscall is defined in ~/cs161/os161/kern/include/kern/syscall.h, and if not, add it or uncomment its existing entry
 - Add a case in ~/cs161/os161/kern/arch/mips/syscall/syscall.c
 - Add to an appropriate file in the syscall directory, or make a new one if none of the existing ones fit.
+- Add the user-facing header to ~/cs161/os161/userland/include/unistd.h
 - Add that file to around line 381 of conf.kern if you made a new one.
 
 So, to test that system call you’d need to (using the options from question 7):
@@ -111,7 +113,7 @@ etc. (as I understand it, the scope of this question ends at the beginning of th
 
 12 --------------------------------------------------------------------------
 
-It’s taken off the CPU's run queue and queued on a wait channel protected by a spinlock.
+It’s taken off the CPU's run queue and queued on a wait channel protected by a spinlock. It also context switches to another thread.
 
 13 --------------------------------------------------------------------------
 
