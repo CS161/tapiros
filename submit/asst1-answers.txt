@@ -1,0 +1,168 @@
+1 ---------------------------------------------------------------------------
+
+When a trap occurs, the general exception handler is called in ~/cs161/os161/kern/arch/mips/locore/exception-mips1.S on line 87. 
+
+This common_exception (later in the same assembly file) function generates a trapframe (as defined in ~/cs161/os161/kern/arch/mips/include/trapframe.h) and passes it through to mips_trap on line 126 of ~/cs161/os161/kern/arch/mips/locore/trap.c .
+
+If the trap is found to be a hardware interrupt (on line 153), we call the interrupt handler with mainbus_interrupt(tf) on line 188.
+
+If the trap is found to be a system call (on line 216), we call the syscall handler with syscall(tf) on line 224, which goes to ~/cs161/os161/kern/arch/mips/syscall/syscall.c .
+
+If it’s found to be a virtual memory fault (on line 233), vm_fault(...) is called, which goes to ~/cs161/os161/kern/arch/mips/vm/dumbvm.c .
+
+2 ---------------------------------------------------------------------------
+
+A system call is called in ~/cs161/os161/userland/lib/libc/arch/mips/syscalls-mips.S on line 84 with the syscall assembly instruction, with the call number (as defined in ~/cs161/os161/kern/include/kern/syscall.h) stored in the v0 register. This triggers the trap described in question 1.
+
+3 ---------------------------------------------------------------------------
+
+The kernel may want to use some libc functions out of convenience, like the str/mem functions, atoi, and regular printf (as opposed to kprintf), especially in definitions of other functions.
+
+4 ---------------------------------------------------------------------------
+
+
+Top-level configure configures things like hardware platform and machine type, optimize/debug flags, root location, Python interpreter location, and compiler. So, if you want to change/rearrange the file structure of the aforementioned things (or if they are moved around), you’d have to rerun configure.
+
+5 ---------------------------------------------------------------------------
+
+Registers, endianness, size of variable types, and number of cores are things that might vary between physical computers. Other behavior might also vary depending on the instruction set architecture, like how traps are implemented at the lowest level, etc.
+
+It’s important to separate machine-independent and -dependent code so it’s easy to find and replace the necessary parts for a different physical machine. Most of the source code (the higher level parts) don’t need to be changed across machines.
+
+6 ---------------------------------------------------------------------------
+
+A trapframe is constructed starting on line 106 of ~/cs161/os161/kern/arch/mips/locore/exception-mips1.S , in the function common_exception. 
+
+At a high level, the assembly uses some tricks to copy the state of the thread (register contents, etc.) at the time of the trap, using the kernel’s k0 and k1 registers to prevent writing over data that needs to be saved (if in user mode; in kernel mode it’s easier).
+
+7 ---------------------------------------------------------------------------
+
+1. b c d
+Change to ASST2 config, then need to bmake depend for possibly changed dependencies and bmake/bmake install like always.
+
+2. c d
+bmake depend for new dependency you just added, bmake/bmake install like always
+
+3. a b c d
+conf.kern needs to be updated for the new files added, then all subsequent commands need to be called to propagate the changes
+
+4. d
+No dependencies were added, but we obviously need to build and install the changes to code
+
+5. 
+sys161.conf is automatically applied when sys161 boots
+
+
+8 ---------------------------------------------------------------------------
+
+array.h's preprocessor hackery basically makes it polymorphic. One might use array.h when making an array of any type of variable that can't easily be represented with a traditional (faster) array of fixed size.
+
+9 ---------------------------------------------------------------------------
+
+This is described in the comments in ~/cs161/os161/userland/lib/crt0/mips/crt0.S
+
+The return value of main (currently in v0) is moved to s0 and a0 (so it’s the argument to exit).
+
+10 --------------------------------------------------------------------------
+
+In order to add a system call, you need to:
+
+- Add a function header to  ~/cs161/os161/kern/include/syscall.h
+- Check that the syscall is defined in ~/cs161/os161/kern/include/kern/syscall.h, and if not, add it or uncomment its existing entry
+- Add a case in ~/cs161/os161/kern/arch/mips/syscall/syscall.c
+- Add to an appropriate file in the syscall directory, or make a new one if none of the existing ones fit.
+- Add that file to around line 381 of conf.kern if you made a new one.
+
+So, to test that system call you’d need to (using the options from question 7):
+
+a b c d
+
+11 --------------------------------------------------------------------------
+
+start.S
+Sets up stack frame: strcpys bootstring into _end, uses strlen to find where to add the null terminator, adds a page for the stack and starts the kernel stack, puts a stack frame on it that follows the specs at the top of start.S
+Uses memmove to copy the code for exception handlers (mips_utlb_handler and mips_general_handler)
+Calls mips_flushicache to make sure instructions are up to date
+Calls tlb_reset to start MMU stuff
+Set some initial flags/0s/NULLs
+Call kmain
+
+main.c
+kmain() calls boot()
+kprintfs separately: newline, OS version, harvard copyright, newline, group name, newline
+Calls ram_bootstrap() (in kern>arch>mips>vm>ram.c) for RAM setup
+Calls more bootstraps to initialize things, mostly found in kern>include: proc_bootstrap() for processes, thread_bootstrap() for threads, hardclock_bootstrap() for the hardware clock, vfs_bootstrap() for the virtual file system
+kheap_nextgeneration() to change the label in kmalloc.c
+kprintf device probe message
+mainbus_bootstrap() detects attached devices and prints them out
+pseudoconfig() seems to do nothing, at least in ASST1
+kprintf a newline
+kheap_nextgeneration() again
+vm_bootstrap() for virtual memory, kprintf_bootstrap for kprintf (creates a spinlock so later prints with multiple threads are active can be atomic)
+thread_start_cpus()
+buffer_bootstrap() for buffer cache
+kheap_nextgeneration() again
+boot() finishes running after some KASSERTs
+once boot() returns to kmain(), it forks the menu thread with menu(arguments);
+
+menu.c
+menu() -> menu_execute()
+etc. (as I understand it, the scope of this question ends at the beginning of the menu)
+
+12 --------------------------------------------------------------------------
+
+It’s taken off the CPU's run queue and queued on a wait channel protected by a spinlock.
+
+13 --------------------------------------------------------------------------
+
+The function thread_switch() on line 570 of ~/cs161/os161/kern/thread/thread.c handles machine-independent context-switching at a high level...
+
+but it has to call switchframe_switch() on line 672 (defined in ~/cs161/os161/kern/arch/mips/thread/switch.S) to actually do the switch at a low level in assembly. This part is machine-dependent.
+
+14 --------------------------------------------------------------------------
+
+Turning interrupts off means preventing traps from being handled (hopefully) temporarily, which prevents context switches away in the middle of your code. For example, this is accomplished in thread.c on line 579 with spl = splhigh(); and then undone on line 588 with splx(spl); Turning interrupts off can be dangerous if you forget to turn them back on or get stuck in the critical section because you just disabled the way to take back control of the thread.
+
+If you let threads be switched during the code that manages switching threads, you’re going to have a bad time (your registers and other data structures will get borked).
+
+15 --------------------------------------------------------------------------
+
+When a thread wakes up another thread (using thread_make_runnable(...) on line 460), it adds the sleeping thread back to the CPU’s runqueue in a ready state; it then runs whenever the scheduler determines it should be run.
+
+16 --------------------------------------------------------------------------
+
+hardclock() (the hardware timer) calls schedule() (line 843) and thread_consider_migration (line 869) in thread.c periodically so that the kernel is guaranteed to get control back regularly. Then the scheduler can reorder threads in the CPU’s run queue, migrate threads to other CPUs if they’re idle, etc. Otherwise, a naughty thread might try to hog or steal CPU time.
+
+17 --------------------------------------------------------------------------
+
+Semaphores are implemented in ~/cs161/os161/kern/thread/synch.c
+
+The sem_create function is a pretty typical init; it notably creates a wait channel and a spinlock to protect access to its sem_count field; it sets that field to the initial count parameter. 
+
+P() acquires the spinlock for atomicity then tries to decrement the sem_count, but if it’s already 0 it goes to sleep on the wait channel, forfeiting the spinlock temporarily. When it eventually wakes up (having reacquired the spinlock), if sem_count is above zero, it leaves its while loop and decrements sem_count; otherwise it just goes back to sleep.
+
+V() acquires the spinlock and increments sem_count, then wakes up one thread on the wait channel. When it releases the spinlock and exits, one might think that the woken thread will immediately continue in P(), but another thread might be scheduled first and get through P() before the signal recipient gets to run, hence the while loop in P().
+
+18 --------------------------------------------------------------------------
+
+lock_do_i_hold() is actually useful for error checking, but lock_get_holder() doesn’t really simplify anything. Since these locks are only usable at the kernel level, you could just use lock->lk_holder to get the holder instead (at least in my implementation). I can't even think of a situation where you'd need to know which other specific thread owns a lock.
+
+This is also a sort of non-answer, but there is no spinlock_get_holder(), so it would be odd for there to be one for regular locks.
+
+Unit Testing ----------------------------------------------------------------
+
+Locks:
+
+1. A thread will error if it tries to acquire a lock it already holds.
+2. Passing a null lock to a lock_destroy will error.
+3. A thread will error if it releases a lock it doesn’t hold.
+4. A thread will be told it holds a lock after it successfully acquires it.
+5. After initializing a lock with name “NAME”, lk_name will be “NAME”, lk_wchan will be initialized, lk_lock will be initialized, and lk_holder will be NULL. 
+
+CVs:
+
+1. A CV will error if destroyed while its wait channel isn’t empty.
+2. A CV will error if a thread tries to signal using a lock it doesn’t own.
+3. Broadcasting to a CV will eventually wake up all sleeping threads.
+4. When a thread wakes up from cv_wait, it holds the lock it passed to it.
+5. An interrupt handler will error if it tries to cv_wait.
