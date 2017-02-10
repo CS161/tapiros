@@ -1,0 +1,63 @@
+1 ---------------------------------------------------------------------------
+
+The ELF magic numbers are a series of numbers to check that the executable is the right type for our system. Specifically, the magic numbers (ELGMAG0, 1, 2, and 3) are: '\177', 'E', 'L', and 'F'. 
+
+There are some extra 1-byte fields for class (32 bit), data (2lsb or 2msb), version, etc. that can be seen in ~/cs161/os161/kern/include/elf.h .
+
+2 ---------------------------------------------------------------------------
+
+UIO_USERISPACE refers to copying to and from the user process’ code.
+UIO_USERSPACE refers to copying to and from the user process’ data.
+UIO_SYSSPACE refers to copying data in and out of the kernel’s memory, so one should use it when transferring data between kernel buffer and kernel memory rather than kernel buffer and user memory.
+
+3 ---------------------------------------------------------------------------
+
+The read goes to the pointer specified in the iovec; the uio is basically just a middleman, not a place where any actual data is stored.
+
+4 ---------------------------------------------------------------------------
+
+You don't want the user to somehow get access to files opened in kernel mode, and beyond security reasons you don't want memory leaks.
+
+5 ---------------------------------------------------------------------------
+
+In ~/cs161/os161/kern/arch/mips/locore/trap.c: 423, enter_new_process makes the processor enter the new process, which then calls mips_usermode() in the same file which actually enters user mode through function asm_usermode() which is written in MIPS code. These processes are machine dependent; they are all in the kern/arch folder (and are clearly ISA-dependent considering some are written in assembly).
+
+6 ---------------------------------------------------------------------------
+
+copyin and copyout are defined in ~/cs161/os161/kern/vm/copyinout.c
+memmove is in ~/cs161/os161/common/libc/string/memmove.c
+
+copyin and copyout are more complicated than memmove because they move data across address spaces (kernel to user or vice versa) and need to be recoverable in the case of fatal kernel memory faults
+
+7 ---------------------------------------------------------------------------
+
+~/cs161/os161/kern/include/types.h defines userptr_t as a pointer to a one-byte struct, so it won't mix with the ordinary void* pointer. This is used to distinguish addresses in a process's memory space from kernel addresses.
+
+1 ---------------------------------------------------------------------------
+
+EX_SYS has value 8 (from ~/cs161/os161/kern/arch/mips/include/trapframe.h)
+
+2 ---------------------------------------------------------------------------
+
+4 bytes (from "tf->tf_epc += 4;" on line 141 of ~/cs161/os161/kern/arch/mips/syscall/syscall.c, where we increment the instruction counter by 4 bytes after a system call)
+
+3 ---------------------------------------------------------------------------
+
+The current behavior doesn't actually kill the thread and communicate the error, but instead kernel panics to display the error. It would make sense for the thread to _exit() with the exit code specified as a parameter.
+
+4 ---------------------------------------------------------------------------
+
+The system call would have to copyin() the extra parameters from the user's stack. You can look at our design documentation for execv() to see something similar.
+
+1 ---------------------------------------------------------------------------
+
+The SYSCALL macro is used to add a system call definition from userland and allow the preprocessor to copy its number in the main system call file.
+
+2 ---------------------------------------------------------------------------
+
+The MIPS instruction is syscall, seen for example in ~cs161/os161/userland/lib/libc/arch/mips/syscalls-mips.S
+
+3 ---------------------------------------------------------------------------
+
+You can use multiple registers to store a single 64-bit value. For example, tf_v0 and tf_v1 can be used to store the return value (32 bits each), as tf_a1 and tf_a2 stored the 64-bit offset parameter.
+
