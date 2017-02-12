@@ -1,4 +1,4 @@
-/*
+s/*
  * Copyright (c) 2000, 2001, 2002, 2003, 2004, 2005, 2008, 2009
  *	The President and Fellows of Harvard College.
  *
@@ -101,20 +101,73 @@ syscall(struct trapframe *tf)
 
 	switch (callno) {
 	    case SYS_reboot:
-		err = sys_reboot(tf->tf_a0);
-		break;
+			err = sys_reboot(tf->tf_a0);
+			break;
 
 	    case SYS___time:
-		err = sys___time((userptr_t)tf->tf_a0,
-				 (userptr_t)tf->tf_a1);
-		break;
+			err = sys___time((userptr_t)tf->tf_a0,
+				 	(userptr_t)tf->tf_a1);
+			break;
 
-	    /* Add stuff here */
+		case SYS_open:
+			err = sys_open((const userptr_t)tf->tf_a0, tf->tf_a1);
+			break;
+
+		case SYS_read:
+			err = sys_read(tf->tf_a0, (userptr_t)tf->tf_a1, tf->tf_a2);
+			break;
+
+		case SYS_write:
+			err = sys_write(tf->tf_a0, (const userptr_t)tf->tf_a1, tf->tf_a2);
+			break;
+
+		case SYS_lseek:
+			err = sys_lseek(tf->tf_a0, tf->tf_a2, tf->tf_a3);
+			// FIX 64 BIT PARAMETER
+			break;
+
+		case SYS_close:
+			err = sys_close(tf->tf_a0);
+			break;
+
+		case SYS_dup2:
+			err = sys_dup2(tf->tf_a0, tf->tf_a1);
+			break;
+
+		case SYS_chdir:
+			err = sys_chdir((const userptr_t)tf->tf_a0);
+			break;
+
+		case SYS___getcwd:
+			err = sys___getcwd((userptr_t)tf->tf_a0, tf->tf_a1);
+			break;
+
+		case SYS_getpid:
+			err = sys_getpid();
+			break;
+
+		case SYS_fork:
+			err = sys_fork();
+			break;
+
+		case SYS_execv:
+			err = sys_execv((const userptr_t)tf->tf_a0, (userptr_t)tf->tf_a1);
+			break;
+
+		case SYS_waitpid:
+			err = sys_waitpid(tf->tf_a0, (userptr_t)tf->tf_a1, tf->tf_a2);
+			break;
+
+		case SYS__exit:
+			sys__exit(tf->tf_a0);
+			break;
+
+	    /* Add more stuff here */
 
 	    default:
-		kprintf("Unknown syscall %d\n", callno);
-		err = ENOSYS;
-		break;
+			kprintf("Unknown syscall %d\n", callno);
+			err = ENOSYS;
+			break;
 	}
 
 
