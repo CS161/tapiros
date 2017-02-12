@@ -1,4 +1,4 @@
-s/*
+/*
  * Copyright (c) 2000, 2001, 2002, 2003, 2004, 2005, 2008, 2009
  *	The President and Fellows of Harvard College.
  *
@@ -160,6 +160,7 @@ syscall(struct trapframe *tf)
 
 		case SYS__exit:
 			sys__exit(tf->tf_a0);
+			err = 0; // so compiler doesn't give me warning
 			break;
 
 	    /* Add more stuff here */
