@@ -37,10 +37,28 @@
  */
 
 #include <spinlock.h>
+#include <array.h>
+#include <synch.h>
 
 struct addrspace;
 struct thread;
 struct vnode;
+struct proc;
+
+/*
+ * Array of procs.
+ */
+#ifndef VFSINLINE
+#define VFSINLINE INLINE
+#endif
+
+DECLARRAY(proc, VFSINLINE);
+DEFARRAY(proc, VFSINLINE);
+
+/*
+ * Maximum number of open file descriptors per process.
+ */
+#define MAX_FDS 1024
 
 /*
  * Process structure.
@@ -60,17 +78,17 @@ struct vnode;
  * without sleeping.
  */
 struct proc {
-	char *p_name;			/* Name of this process */
-	struct spinlock p_lock;		/* Lock for this structure */
-	unsigned p_numthreads;		/* Number of threads in this process */
-
-	/* VM */
-	struct addrspace *p_addrspace;	/* virtual address space */
-
-	/* VFS */
-	struct vnode *p_cwd;		/* current working directory */
-
-	/* add more material here as needed */
+	char *p_name;					// name of this process
+	struct spinlock p_lock;			// lock for this structure
+	unsigned p_numthreads;			// number of threads in this process
+	struct addrspace *p_addrspace;	// virtual address space
+	struct vnode *p_cwd;			// current working directory 
+	struct procarray *p_children;	// array.h of children 
+	struct proc *p_parent;			// pointer to parent process
+	int exit_code;					// -1 until _exit() is called
+	pid_t pid;						// process id (index for global process array)
+	struct wchan *p_wchan;			// parent waits on child's wchan
+	int p_fds[MAX_FDS];				// array of file descriptors
 };
 
 /* This is the process structure for the kernel and for kernel-only threads. */

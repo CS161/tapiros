@@ -48,11 +48,20 @@
 #include <current.h>
 #include <addrspace.h>
 #include <vnode.h>
+#include <wchan.h>
 
 /*
  * The process for the kernel; this holds all the kernel-only threads.
  */
 struct proc *kproc;
+struct procarray *procs;
+
+/*
+ * Helper function for proc_create().
+ */
+pid_t find_free_pid(void) {
+	return 0;
+}
 
 /*
  * Create a proc structure.
@@ -64,25 +73,45 @@ proc_create(const char *name)
 	struct proc *proc;
 
 	proc = kmalloc(sizeof(*proc));
-	if (proc == NULL) {
-		return NULL;
-	}
+	if (proc == NULL)
+		goto err1;
+
 	proc->p_name = kstrdup(name);
-	if (proc->p_name == NULL) {
-		kfree(proc);
-		return NULL;
-	}
+	if (proc->p_name == NULL)
+		goto err2;
 
 	proc->p_numthreads = 0;
 	spinlock_init(&proc->p_lock);
 
-	/* VM fields */
 	proc->p_addrspace = NULL;
-
-	/* VFS fields */
 	proc->p_cwd = NULL;
 
+	proc->p_children = procarray_create();
+	if(proc->p_children == NULL)
+		goto err3;
+
+	proc->p_parent = NULL;
+	proc->exit_code = -1;
+	proc->pid = 0; // find free pid
+
+	proc->p_wchan = wchan_create(proc->p_name);
+	if(proc->p_wchan == NULL)
+		goto err4;
+
+	memset(proc->p_fds, -1, MAX_FDS);
+
 	return proc;
+
+	// error cleanup
+
+	err4:
+		kfree(proc->p_children);
+	err3:
+		kfree(proc->p_name);
+	err2:
+		kfree(proc);
+	err1:
+		return NULL;
 }
 
 /*
@@ -178,8 +207,13 @@ proc_destroy(struct proc *proc)
 void
 proc_bootstrap(void)
 {
+	procs = procarray_create();		// create global procs struct
+	if(procs == NULL) {
+		panic("proc_create for procs failed\n");
+	}
+
 	kproc = proc_create("[kernel]");
-	if (kproc == NULL) {
+	if(kproc == NULL) {
 		panic("proc_create for kproc failed\n");
 	}
 }
