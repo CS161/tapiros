@@ -136,7 +136,14 @@ int uiomovezeros(size_t len, struct uio *uio);
  *      ...
  */
 void uio_kinit(struct iovec *, struct uio *,
-	       void *kbuf, size_t len, off_t pos, enum uio_rw rw);
+			void *kbuf, size_t len, off_t pos, enum uio_rw rw);
+
+
+/*
+ * Initialize a uio suitable for I/O from a user buffer.
+ */
+void uio_uinit(struct iovec *, struct uio *, userptr_t ubuf, size_t len, 
+			off_t pos, enum uio_rw rw, struct addrspace *addr);
 
 
 #endif /* _UIO_H_ */
