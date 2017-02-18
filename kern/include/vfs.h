@@ -51,7 +51,7 @@ struct vfile {
 	char *vf_name;
 	struct vnode *vf_vnode;
 	int vf_flags;
-	int vf_offset;
+	off_t vf_offset;
 	int vf_refcount;
 	struct spinlock vf_lock;	// protects refcount and offset access
 };

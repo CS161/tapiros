@@ -134,24 +134,72 @@ int sys_open(char* pathname, int flags, int *retval) {
 }
 
 int sys_read(int fd, userptr_t buf, size_t buflen, int *retval) {
-	if(fd < 0 || fd >= MAX_FDS || CUR_FDS(fd) < 0)	// nefarious user errors
+	if(fd < 0 || fd >= MAX_FDS || CUR_FDS(fd) < 0)	// invalid fd
+		return EBADF;
+	if(VFILES(CUR_FDS(fd))->vf_flags == O_WRONLY)	// reads not permitted
 		return EBADF;
 
-	(void)buf;
-	(void)buflen;
-	(void)retval;
-	// do stuff
+	struct iovec iov;
+	struct uio uio;
+
+
+	spinlock_acquire(&VFILES(CUR_FDS(fd))->vf_lock); // protect access to vf_offset
+
+	off_t off = VFILES(CUR_FDS(fd))->vf_offset;
+	uio_uinit(&iov, &uio, buf, buflen, off, UIO_READ, curproc->p_addrspace);
+
+	spinlock_release(&VFILES(CUR_FDS(fd))->vf_lock);
+
+
+	int err = VOP_READ(VFILES(CUR_FDS(fd))->vf_vnode, &uio);
+	if(err != 0)
+		return err;
+
+	if(retval != NULL)
+		*retval = uio.uio_offset - off;
+
+
+	spinlock_acquire(&VFILES(CUR_FDS(fd))->vf_lock); 
+
+	VFILES(CUR_FDS(fd))->vf_offset = uio.uio_offset;
+
+	spinlock_release(&VFILES(CUR_FDS(fd))->vf_lock);
+
 	return 0;
 }
 
 int sys_write(int fd, const userptr_t buf, size_t buflen, int *retval) {
-	if(fd < 0 || fd >= MAX_FDS || CUR_FDS(fd) < 0)	// nefarious user errors
+	if(fd < 0 || fd >= MAX_FDS || CUR_FDS(fd) < 0)	// invalid fd
+		return EBADF;
+	if(VFILES(CUR_FDS(fd))->vf_flags == O_RDONLY)	// writes not permitted
 		return EBADF;
 
-	(void)buf;
-	(void)buflen;
-	(void)retval;
-	// do stuff
+	struct iovec iov;
+	struct uio uio;
+
+
+	spinlock_acquire(&VFILES(CUR_FDS(fd))->vf_lock); // protect access to vf_offset
+
+	off_t off = VFILES(CUR_FDS(fd))->vf_offset;
+	uio_uinit(&iov, &uio, buf, buflen, off, UIO_WRITE, curproc->p_addrspace);
+
+	spinlock_release(&VFILES(CUR_FDS(fd))->vf_lock);
+
+
+	int err = VOP_WRITE(VFILES(CUR_FDS(fd))->vf_vnode, &uio);
+	if(err != 0)
+		return err;
+
+	if(retval != NULL)
+		*retval = uio.uio_offset - off;
+
+
+	spinlock_acquire(&VFILES(CUR_FDS(fd))->vf_lock); 
+
+	VFILES(CUR_FDS(fd))->vf_offset = uio.uio_offset;
+
+	spinlock_release(&VFILES(CUR_FDS(fd))->vf_lock);
+
 	return 0;
 }
 int sys_lseek(int fd, off_t pos, int whence, int *retval) {
@@ -199,20 +247,20 @@ int sys_dup2(int oldfd, int newfd, int *retval) {
 		newfd < 0 || newfd >= MAX_FDS)
 		return EBADF;
 
-	if(oldfd == newfd) {
+	if(oldfd == newfd) {	// if both fds are the same, do nothing
 		if(retval != NULL)
 			*retval = newfd;
 		return 0;
 	}
 
-	if(CUR_FDS(newfd) != -1) {
+	if(CUR_FDS(newfd) != -1) {	// close newfd if it already describes a file
 		sys_close(newfd);
 	}
 	CUR_FDS(newfd) = CUR_FDS(oldfd);
 
 	spinlock_acquire(&VFILES(CUR_FDS(newfd))->vf_lock);
 
-	VFILES(CUR_FDS(newfd))->vf_refcount++;
+	VFILES(CUR_FDS(newfd))->vf_refcount++;	// keep track of references
 
 	spinlock_release(&VFILES(CUR_FDS(newfd))->vf_lock);
 
