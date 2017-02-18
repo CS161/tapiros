@@ -155,8 +155,8 @@ int sys_close(int fd) {
 	if(fd < 0 || fd > MAX_FDS || CUR_FDS(fd) == -1)	// nefarious user errors
 		return EBADF;
 
-	KASSERT(CUR_FDS(fd) < procarray_num(procs));	// these conditions shouldn't be possible
-	KASSERT(VFILES(CUR_FDS(fd)) != NULL);			// without errors in kernel code elsewhere
+	KASSERT(CUR_FDS(fd) < (int)procarray_num(procs));	// these conditions shouldn't be possible
+	KASSERT(VFILES(CUR_FDS(fd)) != NULL);				// without errors in kernel code elsewhere
 
 	struct vfile *vf = VFILES(CUR_FDS(fd));
 	CUR_FDS(fd) = -1;	// mark per-process fd slot as available
