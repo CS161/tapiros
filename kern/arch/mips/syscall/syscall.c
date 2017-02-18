@@ -35,6 +35,8 @@
 #include <thread.h>
 #include <current.h>
 #include <syscall.h>
+#include <limits.h>
+#include <copyinout.h>
 
 
 /*
@@ -109,20 +111,36 @@ syscall(struct trapframe *tf)
 				 	(userptr_t)tf->tf_a1);
 			break;
 
-		case SYS_open:
-			err = sys_open((const userptr_t)tf->tf_a0, tf->tf_a1);
+		/* 
+		 * Copy the string from the user pointer before calling sys_open so that
+		 * sys_open can be called from within the kernel (e.g. in vfiles_init).
+		 */
+		case SYS_open: 
+			;	// compiler says this is needed between a label and a declaration
+			size_t len = 0;
+			char *kbuf = kmalloc(sizeof(char) * PATH_MAX);
+			if(kbuf == NULL) {
+				err = ENOMEM;
+				break;
+			}
+			
+			err = copyinstr((const userptr_t)tf->tf_a0, kbuf, PATH_MAX, &len);
+			if(err == 0)
+				err = sys_open(kbuf, tf->tf_a1, &retval);
+
+			kfree(kbuf);
 			break;
 
 		case SYS_read:
-			err = sys_read(tf->tf_a0, (userptr_t)tf->tf_a1, tf->tf_a2);
+			err = sys_read(tf->tf_a0, (userptr_t)tf->tf_a1, tf->tf_a2, &retval);
 			break;
 
 		case SYS_write:
-			err = sys_write(tf->tf_a0, (const userptr_t)tf->tf_a1, tf->tf_a2);
+			err = sys_write(tf->tf_a0, (const userptr_t)tf->tf_a1, tf->tf_a2, &retval);
 			break;
 
 		case SYS_lseek:
-			err = sys_lseek(tf->tf_a0, tf->tf_a2, tf->tf_a3);
+			err = sys_lseek(tf->tf_a0, tf->tf_a2, tf->tf_a3, &retval);
 			// FIX 64 BIT PARAMETER
 			break;
 
@@ -143,11 +161,11 @@ syscall(struct trapframe *tf)
 			break;
 
 		case SYS_getpid:
-			err = sys_getpid();
+			err = sys_getpid(&retval);
 			break;
 
 		case SYS_fork:
-			err = sys_fork();
+			err = sys_fork(&retval);
 			break;
 
 		case SYS_execv:
@@ -155,7 +173,7 @@ syscall(struct trapframe *tf)
 			break;
 
 		case SYS_waitpid:
-			err = sys_waitpid(tf->tf_a0, (userptr_t)tf->tf_a1, tf->tf_a2);
+			err = sys_waitpid(tf->tf_a0, (userptr_t)tf->tf_a1, tf->tf_a2, &retval);
 			break;
 
 		case SYS__exit:

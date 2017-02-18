@@ -32,6 +32,7 @@
 
 
 #include <array.h>
+#include <synch.h>
 
 
 /*
@@ -45,6 +46,40 @@ struct uio;    /* kernel or userspace I/O buffer (uio.h) */
 struct device; /* abstract structure for a device (dev.h) */
 struct fs;     /* abstract structure for a filesystem (fs.h) */
 struct vnode;  /* abstract structure for an on-disk file (vnode.h) */
+
+struct vfile {
+	char *vf_name;
+	struct vnode *vf_vnode;
+	int vf_flags;
+	int vf_offset;
+	int vf_refcount;
+	struct spinlock vf_lock;	// protects refcount and offset access
+};
+
+/*
+ * Array of vnodes.
+ */
+#ifndef VFSINLINE
+#define VFSINLINE INLINE
+#endif
+
+DECLARRAY(vnode, VFSINLINE);
+DEFARRAY(vnode, VFSINLINE);
+
+/*
+ * Array of vfiles.
+ */
+
+DECLARRAY(vfile, VFSINLINE);
+DEFARRAY(vfile, VFSINLINE);
+
+#define VFILES(i) vfilearray_get(vfiles, i)		// get element i from the vfiles array
+#define CUR_FDS(fd) curproc->p_fds[fd]			// get a global index for an fd in the current proc's table
+
+struct vfilearray *vfiles;	// global file descriptor table
+struct spinlock gf_lock;	// protects adding/removing entries in vfiles
+
+void set_vfile(struct vfile *vfile, int fd);
 
 /*
  * VFS layer low-level operations.
@@ -171,6 +206,7 @@ int vfs_getcwd(struct uio *buf);
  */
 
 void vfs_bootstrap(void);
+void vfiles_init(void);
 
 void vfs_initbootfs(void);
 int vfs_setbootfs(const char *fsname);
@@ -187,16 +223,6 @@ int vfs_unmount(const char *devname);
 int vfs_swapon(const char *devname, struct vnode **result);
 int vfs_swapoff(const char *devname);
 int vfs_unmountall(void);
-
-/*
- * Array of vnodes.
- */
-#ifndef VFSINLINE
-#define VFSINLINE INLINE
-#endif
-
-DECLARRAY(vnode, VFSINLINE);
-DEFARRAY(vnode, VFSINLINE);
 
 /*
  * Global one-big-lock for all filesystem operations.

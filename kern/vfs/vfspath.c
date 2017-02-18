@@ -53,14 +53,14 @@ vfs_open(char *path, int openflags, mode_t mode, struct vnode **ret)
 
 	switch (how) {
 	    case O_RDONLY:
-		canwrite=0;
-		break;
+			canwrite=0;
+			break;
 	    case O_WRONLY:
 	    case O_RDWR:
-		canwrite=1;
-		break;
+			canwrite=1;
+			break;
 	    default:
-		return EINVAL;
+			return EINVAL;
 	}
 
 	if (openflags & O_CREAT) {

@@ -59,19 +59,20 @@ __DEAD void enter_new_process(int argc, userptr_t argv, userptr_t env,
 int sys_reboot(int code);
 int sys___time(userptr_t user_seconds, userptr_t user_nanoseconds);
 
-int sys_open(const userptr_t pathname, int flags);
-ssize_t sys_read(int fd, userptr_t buf, size_t buflen);
-ssize_t sys_write(int fd, const userptr_t buf, size_t buflen);
-off_t sys_lseek(int fd, off_t pos, int whence);
+int sys_open(char* kbuf, int flags, int *retval);	// syscall.c converts userptr_t to kernel pointer before calling
+													// so that the kernel can use sys_open
+int sys_read(int fd, userptr_t buf, size_t buflen, int *retval);
+int sys_write(int fd, const userptr_t buf, size_t buflen, int *retval);
+int sys_lseek(int fd, off_t pos, int whence, int *retval);
 int sys_close(int fd);
 int sys_dup2(int oldfd, int newfd);
 int sys_chdir(const userptr_t pathname);
 int sys___getcwd(userptr_t buf, size_t buflen);
 
-pid_t sys_getpid(void);
-pid_t sys_fork(void);
+int sys_getpid(int *retval);
+int sys_fork(int *retval);
 int sys_execv(const userptr_t program, userptr_t argv);
-pid_t sys_waitpid(pid_t pid, userptr_t status, int options);
+int sys_waitpid(pid_t pid, userptr_t status, int options, int *retval);
 void sys__exit(int exitcode);
 
 #endif /* _SYSCALL_H_ */

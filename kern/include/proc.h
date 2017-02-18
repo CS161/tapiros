@@ -55,6 +55,12 @@ struct proc;
 DECLARRAY(proc, VFSINLINE);
 DEFARRAY(proc, VFSINLINE);
 
+#define PROCS(i) procarray_get(procs, i)	// macro to simplify array access
+
+struct proc *kproc;			// the process for the kernel; holds all kernel-only threads
+struct procarray *procs;	// global process table
+struct spinlock gp_lock; 	// protects adding/removing entries in procs
+
 /*
  * Maximum number of open file descriptors per process.
  */
@@ -79,7 +85,6 @@ DEFARRAY(proc, VFSINLINE);
  */
 struct proc {
 	char *p_name;					// name of this process
-	struct spinlock p_lock;			// lock for this structure
 	unsigned p_numthreads;			// number of threads in this process
 	struct addrspace *p_addrspace;	// virtual address space
 	struct vnode *p_cwd;			// current working directory 
@@ -88,11 +93,15 @@ struct proc {
 	int exit_code;					// -1 until _exit() is called
 	pid_t pid;						// process id (index for global process array)
 	struct wchan *p_wchan;			// parent waits on child's wchan
+	struct spinlock p_lock;			// lock for this structure
 	int p_fds[MAX_FDS];				// array of file descriptors
 };
 
 /* This is the process structure for the kernel and for kernel-only threads. */
 extern struct proc *kproc;
+
+/* Helper function for proc_create() that assigns proc the first available pid in 'procs'. */
+void set_pid(struct proc *proc);
 
 /* Call once during system startup to allocate data structures. */
 void proc_bootstrap(void);

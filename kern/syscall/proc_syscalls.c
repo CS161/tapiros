@@ -12,14 +12,17 @@
 #include <current.h>
 #include <addrspace.h>
 #include <syscall.h>
+#include <copyinout.h>
 
 
-pid_t sys_getpid(void) {
-	// do stuff
+int sys_getpid(int *retval) {
+	KASSERT(retval != NULL);
+	*retval = curproc->pid;
 	return 0;
 }
 
-pid_t sys_fork(void) {
+int sys_fork(int *retval) {
+	(void)retval;
 	// do stuff
 	return 0;
 }
@@ -31,10 +34,11 @@ int sys_execv(const userptr_t program, userptr_t argv) {
 	return 0;
 }
 
-pid_t sys_waitpid(pid_t pid, userptr_t status, int options) {
+int sys_waitpid(pid_t pid, userptr_t status, int options, int *retval) {
 	(void)pid;
 	(void)status;
 	(void)options;
+	(void)retval;
 	// do stuff
 	return 0;
 }

@@ -50,17 +50,33 @@
 #include <vnode.h>
 #include <wchan.h>
 
-/*
- * The process for the kernel; this holds all the kernel-only threads.
- */
-struct proc *kproc;
-struct procarray *procs;
 
 /*
- * Helper function for proc_create().
+ * Helper function for proc_create(). Iterates through procs, and sets
+ * proc's pid to the first empty slot (or adds a new one if necessary).
  */
-pid_t find_free_pid(void) {
-	return 0;
+void set_pid(struct proc *proc) {
+	spinlock_acquire(&gp_lock);
+
+	int max = procarray_num(procs);
+	pid_t pid = -1;
+	for(int i = 0; i < max; i++) {
+		if(PROCS(i) == NULL) {
+			pid = i;
+			break;
+		}
+	}
+
+	if(pid < 0) {
+		procarray_add(procs, proc, NULL);
+		proc->pid = max;
+	}
+	else {
+		procarray_set(procs, pid, proc);
+		proc->pid = pid;
+	}
+
+	spinlock_release(&gp_lock);
 }
 
 /*
@@ -80,23 +96,21 @@ proc_create(const char *name)
 	if (proc->p_name == NULL)
 		goto err2;
 
-	proc->p_numthreads = 0;
-	spinlock_init(&proc->p_lock);
-
-	proc->p_addrspace = NULL;
-	proc->p_cwd = NULL;
-
 	proc->p_children = procarray_create();
 	if(proc->p_children == NULL)
 		goto err3;
 
-	proc->p_parent = NULL;
-	proc->exit_code = -1;
-	proc->pid = 0; // find free pid
-
 	proc->p_wchan = wchan_create(proc->p_name);
 	if(proc->p_wchan == NULL)
 		goto err4;
+
+	spinlock_init(&proc->p_lock);
+	proc->p_numthreads = 0;
+	proc->p_addrspace = NULL;
+	proc->p_cwd = NULL;
+	proc->p_parent = NULL;
+	proc->exit_code = -1;
+	set_pid(proc); // set proc to free pid
 
 	memset(proc->p_fds, -1, MAX_FDS);
 
@@ -197,6 +211,15 @@ proc_destroy(struct proc *proc)
 	KASSERT(proc->p_numthreads == 0);
 	spinlock_cleanup(&proc->p_lock);
 
+	wchan_destroy(proc->p_wchan);
+
+	// DECREF FILE DESCRIPTOR TABLE HERE
+
+	procarray_set(procs, proc->pid, NULL);
+
+	KASSERT(procarray_num(proc->p_children) == 0);
+	kfree(proc->p_children); // must empty array in waitpid() first
+
 	kfree(proc->p_name);
 	kfree(proc);
 }
@@ -209,13 +232,15 @@ proc_bootstrap(void)
 {
 	procs = procarray_create();		// create global procs struct
 	if(procs == NULL) {
-		panic("proc_create for procs failed\n");
+		panic("procarray_create for procs failed\n");
 	}
 
 	kproc = proc_create("[kernel]");
 	if(kproc == NULL) {
 		panic("proc_create for kproc failed\n");
 	}
+
+	spinlock_init(&gp_lock);
 }
 
 /*
