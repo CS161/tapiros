@@ -207,7 +207,12 @@ int sys_dup2(int oldfd, int newfd, int *retval) {
 		sys_close(newfd);
 	}
 	CUR_FDS(newfd) = CUR_FDS(oldfd);
+
+	spinlock_acquire(&VFILES(CUR_FDS(newfd))->vf_lock);
+
 	VFILES(CUR_FDS(newfd))->vf_refcount++;
+
+	spinlock_release(&VFILES(CUR_FDS(newfd))->vf_lock);
 
 	if(retval != NULL)
 		*retval = newfd;
