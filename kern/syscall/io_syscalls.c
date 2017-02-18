@@ -28,20 +28,23 @@ void vfiles_init(void) {
 
 	spinlock_init(&gf_lock);
 
-	char* console = kstrdup("con:");
-	if(console == NULL) {
+	char* console = kstrdup("con:");	// vfs methods eat the pathname,
+	if(console == NULL) {				// so it can't be a const char *
 		panic("console string couldn't be allocated\n");
 	}
 
+	// open standard in
 	if(sys_open(console, O_RDONLY, NULL))
 		panic("stdin open failed\n");
 	kfree(console);
 
+	// open standard out
 	console = kstrdup("con:");
 	if(sys_open(console, O_WRONLY, NULL))
 		panic("stdout open failed\n");
 	kfree(console);
 
+	// open standard error
 	console = kstrdup("con:");
 	if(sys_open(console, O_WRONLY, NULL))
 		panic("stderr open failed\n");
@@ -56,18 +59,18 @@ void set_vfile(struct vfile *vfile, int fd) {
 
 	int max = vfilearray_num(vfiles);
 	int slot = -1;
-	for(int i = 0; i < max; i++) {
-		if(VFILES(i) == NULL) {
+	for(int i = 0; i < max; i++) {	// iterate through vfiles until we find
+		if(VFILES(i) == NULL) {		// an empty spot or reach the end
 			slot = i;
 			break;
 		}
 	}
 
-	if(slot < 0) {
+	if(slot < 0) {		// add to the end of vfiles
 		vfilearray_add(vfiles, vfile, NULL);
 		CUR_FDS(fd) = max;
 	}
-	else {
+	else {		// use an empty slot in the middle of vfiles
 		vfilearray_set(vfiles, slot, vfile);
 		CUR_FDS(fd) = slot;
 	}
@@ -77,6 +80,7 @@ void set_vfile(struct vfile *vfile, int fd) {
 
 int sys_open(char* pathname, int flags, int *retval) {
 	int err = 0;
+
 	int fd = -1;
 	for(int i = 0; i < MAX_FDS; i++) {
 		if(CUR_FDS(i) == -1) {
@@ -111,11 +115,13 @@ int sys_open(char* pathname, int flags, int *retval) {
 	vf->vf_offset = 0;
 	vf->vf_refcount = 1;
 
-	set_vfile(vf, fd);
-
+	set_vfile(vf, fd);	// add the appropriate entries to the per-process
+						// and global file descriptor tables
 	if(retval != NULL)
 		*retval = fd;
 	return 0;
+
+	// error cleanup
 
 	err3:
 		kfree(vf->vf_name);
@@ -126,7 +132,9 @@ int sys_open(char* pathname, int flags, int *retval) {
 }
 
 int sys_read(int fd, userptr_t buf, size_t buflen, int *retval) {
-	(void)fd;
+	if(fd < 0 || fd >= MAX_FDS || CUR_FDS(fd) < 0)	// nefarious user errors
+		return EBADF;
+
 	(void)buf;
 	(void)buflen;
 	(void)retval;
@@ -135,7 +143,9 @@ int sys_read(int fd, userptr_t buf, size_t buflen, int *retval) {
 }
 
 int sys_write(int fd, const userptr_t buf, size_t buflen, int *retval) {
-	(void)fd;
+	if(fd < 0 || fd >= MAX_FDS || CUR_FDS(fd) < 0)	// nefarious user errors
+		return EBADF;
+
 	(void)buf;
 	(void)buflen;
 	(void)retval;
@@ -143,7 +153,9 @@ int sys_write(int fd, const userptr_t buf, size_t buflen, int *retval) {
 	return 0;
 }
 int sys_lseek(int fd, off_t pos, int whence, int *retval) {
-	(void)fd;
+	if(fd < 0 || fd >= MAX_FDS || CUR_FDS(fd) < 0)	// nefarious user errors
+		return EBADF;
+
 	(void)pos;
 	(void)whence;
 	(void)retval;
@@ -152,7 +164,7 @@ int sys_lseek(int fd, off_t pos, int whence, int *retval) {
 }
 
 int sys_close(int fd) {
-	if(fd < 0 || fd > MAX_FDS || CUR_FDS(fd) < 0)	// nefarious user errors
+	if(fd < 0 || fd >= MAX_FDS || CUR_FDS(fd) < 0)	// nefarious user errors
 		return EBADF;
 
 	KASSERT((size_t)CUR_FDS(fd) < procarray_num(procs));	// these conditions shouldn't be possible
@@ -180,10 +192,25 @@ int sys_close(int fd) {
 	return 0;
 }
 
-int sys_dup2(int oldfd, int newfd) {
-	(void)oldfd;
-	(void)newfd;
-	// do stuff
+int sys_dup2(int oldfd, int newfd, int *retval) {
+	if(oldfd < 0 || oldfd >= MAX_FDS || CUR_FDS(oldfd) < 0 || 
+		newfd < 0 || newfd >= MAX_FDS)
+		return EBADF;
+
+	if(oldfd == newfd) {
+		if(retval != NULL)
+			*retval = newfd;
+		return 0;
+	}
+
+	if(CUR_FDS(newfd) != -1) {
+		sys_close(newfd);
+	}
+	CUR_FDS(newfd) = CUR_FDS(oldfd);
+	VFILES(CUR_FDS(newfd))->vf_refcount++;
+
+	if(retval != NULL)
+		*retval = newfd;
 	return 0;
 }
 

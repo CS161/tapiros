@@ -65,7 +65,7 @@ int sys_read(int fd, userptr_t buf, size_t buflen, int *retval);
 int sys_write(int fd, const userptr_t buf, size_t buflen, int *retval);
 int sys_lseek(int fd, off_t pos, int whence, int *retval);
 int sys_close(int fd);
-int sys_dup2(int oldfd, int newfd);
+int sys_dup2(int oldfd, int newfd, int *retval);
 int sys_chdir(const userptr_t pathname);
 int sys___getcwd(userptr_t buf, size_t buflen);
 
