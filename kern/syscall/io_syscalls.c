@@ -17,7 +17,9 @@
 #include <current.h>
 #include <proc.h>
 
-
+/*
+ * Initialize the vfiles array, including stdin, stdout, and stderr.
+ */
 void vfiles_init(void) {
 	vfiles = vfilearray_create();
 	if(vfiles == NULL) {
@@ -28,7 +30,7 @@ void vfiles_init(void) {
 
 	char* console = kstrdup("con:");
 	if(console == NULL) {
-		panic("console string coudln't be allocated\n");
+		panic("console string couldn't be allocated\n");
 	}
 
 	if(sys_open(console, O_RDONLY, NULL))
@@ -47,7 +49,7 @@ void vfiles_init(void) {
 }
 
 /*
- * Find the index of a free or matching vfile slot in vfiles.
+ * Find the index of a free vfile slot in vfiles.
  */
 void set_vfile(struct vfile *vfile, int fd) {
 	spinlock_acquire(&gf_lock);
@@ -74,7 +76,7 @@ void set_vfile(struct vfile *vfile, int fd) {
 }
 
 int sys_open(char* pathname, int flags, int *retval) {
-	int ret = 0;
+	int err = 0;
 	int fd = -1;
 	for(int i = 0; i < MAX_FDS; i++) {
 		if(CUR_FDS(i) == -1) {
@@ -83,24 +85,24 @@ int sys_open(char* pathname, int flags, int *retval) {
 		}
 	}
 	if(fd == -1) {
-		ret = EMFILE;
+		err = EMFILE;
 		goto err1;
 	}
 
 	struct vfile *vf = kmalloc(sizeof(struct vfile *));
 	if(vf == NULL) {
-		ret = ENOMEM;
+		err = ENOMEM;
 		goto err1;
 	}
 
 	vf->vf_name = kstrdup(pathname);
 	if(vf->vf_name == NULL) {
-		ret = ENOMEM;
+		err = ENOMEM;
 		goto err2;
 	}
 
-	ret = vfs_open(pathname, flags, 0, &vf->vf_vnode);
-	if(ret != 0) {
+	err = vfs_open(pathname, flags, 0, &vf->vf_vnode);
+	if(err != 0) {
 		goto err3;
 	}
 
@@ -120,7 +122,7 @@ int sys_open(char* pathname, int flags, int *retval) {
 	err2:
 		kfree(vf);
 	err1:
-		return ret;
+		return err;
 }
 
 int sys_read(int fd, userptr_t buf, size_t buflen, int *retval) {
@@ -150,8 +152,31 @@ int sys_lseek(int fd, off_t pos, int whence, int *retval) {
 }
 
 int sys_close(int fd) {
-	(void)fd;
-	// do stuff
+	if(fd < 0 || fd > MAX_FDS || CUR_FDS(fd) == -1)	// nefarious user errors
+		return EBADF;
+
+	KASSERT(CUR_FDS(fd) < procarray_num(procs));	// these conditions shouldn't be possible
+	KASSERT(VFILES(CUR_FDS(fd)) != NULL);			// without errors in kernel code elsewhere
+
+	struct vfile *vf = VFILES(CUR_FDS(fd));
+	CUR_FDS(fd) = -1;	// mark per-process fd slot as available
+
+	spinlock_acquire(&vf->vf_lock);		// multiple processes might close the same file simultaneously
+
+	KASSERT(vf->vf_refcount > 0);
+	vf->vf_refcount--;
+
+	spinlock_release(&vf->vf_lock);
+
+	// at this point, we only need to touch vf if no one else can,
+	// which means we don't need to worry about synchronization
+	if(vf->vf_refcount == 0) {
+		kfree(vf->vf_name);
+		vfs_close(vf->vf_vnode);
+		spinlock_cleanup(&vf->vf_lock);
+		kfree(vf);
+	}
+
 	return 0;
 }
 
