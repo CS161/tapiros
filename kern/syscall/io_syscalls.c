@@ -16,6 +16,8 @@
 #include <kern/fcntl.h>
 #include <current.h>
 #include <proc.h>
+#include <limits.h>
+#include <copyinout.h>
 
 /*
  * Initialize the vfiles array, including stdin, stdout, and stderr.
@@ -220,9 +222,20 @@ int sys_dup2(int oldfd, int newfd, int *retval) {
 }
 
 int sys_chdir(const userptr_t pathname) {
-	(void)pathname;
-	// do stuff
-	return 0;
+	int err = 0;
+
+	size_t len = 0;
+	char *kbuf = kmalloc(sizeof(char) * PATH_MAX);
+	if(kbuf == NULL)
+		return ENOMEM;
+			
+	err = copyinstr(pathname, kbuf, PATH_MAX, &len);
+	if(err == 0)
+		err = vfs_chdir(kbuf);
+
+	kfree(kbuf);
+
+	return err;		// 0 upon success
 }
 
 int sys___getcwd(userptr_t buf, size_t buflen) {
