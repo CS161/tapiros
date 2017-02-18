@@ -286,9 +286,17 @@ int sys_chdir(const userptr_t pathname) {
 	return err;		// 0 upon success
 }
 
-int sys___getcwd(userptr_t buf, size_t buflen) {
-	(void)buf;
-	(void)buflen;
-	// do stuff
+int sys___getcwd(userptr_t buf, size_t buflen, int *retval) {
+	struct iovec iov;
+	struct uio uio;
+
+	uio_uinit(&iov, &uio, buf, buflen, 0, UIO_READ, curproc->p_addrspace);
+
+	int err = vfs_getcwd(&uio);
+	if(err != 0)
+		return err;
+
+	if(retval != NULL)
+		*retval = uio.uio_offset;
 	return 0;
 }
