@@ -99,7 +99,7 @@ int sys_open(char* pathname, int flags, int *retval) {
 		goto err2;
 	}
 
-	//ret = vfs_open(pathname, flags, 0, &vf->vf_vnode);
+	ret = vfs_open(pathname, flags, 0, &vf->vf_vnode);
 	if(ret != 0) {
 		goto err3;
 	}
