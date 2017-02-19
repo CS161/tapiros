@@ -168,8 +168,8 @@ uio_kinit(struct iovec *iov, struct uio *u,
  */
 
 void
-uio_uinit(struct iovec *iov, struct uio *u, userptr_t ubuf, 
-	size_t len, off_t pos, enum uio_rw rw, struct addrspace *addr)
+uio_uinit(struct iovec *iov, struct uio *u, 
+	userptr_t ubuf, size_t len, off_t pos, enum uio_rw rw)
 {
 	iov->iov_ubase = ubuf;
 	iov->iov_len = len;
@@ -179,5 +179,5 @@ uio_uinit(struct iovec *iov, struct uio *u, userptr_t ubuf,
 	u->uio_resid = len;
 	u->uio_segflg = UIO_USERSPACE;
 	u->uio_rw = rw;
-	u->uio_space = addr;
+	u->uio_space = curproc->p_addrspace;
 }

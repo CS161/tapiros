@@ -100,9 +100,6 @@ struct proc {
 /* This is the process structure for the kernel and for kernel-only threads. */
 extern struct proc *kproc;
 
-/* Helper function for proc_create() that assigns proc the first available pid in 'procs'. */
-void set_pid(struct proc *proc);
-
 /* Call once during system startup to allocate data structures. */
 void proc_bootstrap(void);
 

@@ -30,24 +30,28 @@ void vfiles_init(void) {
 
 	spinlock_init(&gf_lock);
 
-	char* console = kstrdup("con:");	// vfs methods eat the pathname,
-	if(console == NULL) {				// so it can't be a const char *
-		panic("console string couldn't be allocated\n");
-	}
+	char* console;
 
 	// open standard in
+	console = kstrdup("con:");		// vfs methods eat the pathname,
+	if(console == NULL)				// so it can't be a const char *
+		panic("console string couldn't be allocated\n");
 	if(sys_open(console, O_RDONLY, NULL))
 		panic("stdin open failed\n");
 	kfree(console);
 
 	// open standard out
 	console = kstrdup("con:");
+	if(console == NULL)
+		panic("console string couldn't be allocated\n");
 	if(sys_open(console, O_WRONLY, NULL))
 		panic("stdout open failed\n");
 	kfree(console);
 
 	// open standard error
 	console = kstrdup("con:");
+	if(console == NULL)
+		panic("console string couldn't be allocated\n");
 	if(sys_open(console, O_WRONLY, NULL))
 		panic("stderr open failed\n");
 	kfree(console);
@@ -56,7 +60,9 @@ void vfiles_init(void) {
 /*
  * Find the index of a free vfile slot in vfiles.
  */
-void set_vfile(struct vfile *vfile, int fd) {
+static int add_vfile(struct vfile *vfile, int fd) {
+	int err = 0;
+
 	spinlock_acquire(&gf_lock);
 
 	int max = vfilearray_num(vfiles);
@@ -69,8 +75,9 @@ void set_vfile(struct vfile *vfile, int fd) {
 	}
 
 	if(slot < 0) {		// add to the end of vfiles
-		vfilearray_add(vfiles, vfile, NULL);
-		CUR_FDS(fd) = max;
+		err = vfilearray_add(vfiles, vfile, NULL);
+		if(err == 0)
+			CUR_FDS(fd) = max;
 	}
 	else {		// use an empty slot in the middle of vfiles
 		vfilearray_set(vfiles, slot, vfile);
@@ -78,6 +85,8 @@ void set_vfile(struct vfile *vfile, int fd) {
 	}
 
 	spinlock_release(&gf_lock);
+
+	return err;
 }
 
 int sys_open(char* pathname, int flags, int *retval) {
@@ -107,8 +116,8 @@ int sys_open(char* pathname, int flags, int *retval) {
 		goto err2;
 	}
 
-	err = vfs_open(pathname, flags, 0, &vf->vf_vnode);
-	if(err != 0) {
+	err = vfs_open(pathname, flags, 0666, &vf->vf_vnode);	// 0666 for read/write
+	if(err != 0) {											// vf_flags will enforce perms
 		goto err3;
 	}
 
@@ -117,14 +126,19 @@ int sys_open(char* pathname, int flags, int *retval) {
 	vf->vf_offset = 0;
 	vf->vf_refcount = 1;
 
-	set_vfile(vf, fd);	// add the appropriate entries to the per-process
-						// and global file descriptor tables
+	if(add_vfile(vf, fd) != 0)	{	// add the appropriate entries to the per-process
+		goto err4;					// and global file descriptor tables
+	}
+	
 	if(retval != NULL)
 		*retval = fd;
 	return 0;
 
 	// error cleanup
 
+	err4:
+		vfs_close(vf->vf_vnode);
+		spinlock_cleanup(&vf->vf_lock);
 	err3:
 		kfree(vf->vf_name);
 	err2:
@@ -146,7 +160,7 @@ int sys_read(int fd, userptr_t buf, size_t buflen, int *retval) {
 	spinlock_acquire(&VFILES(CUR_FDS(fd))->vf_lock); // protect access to vf_offset
 
 	off_t off = VFILES(CUR_FDS(fd))->vf_offset;
-	uio_uinit(&iov, &uio, buf, buflen, off, UIO_READ, curproc->p_addrspace);
+	uio_uinit(&iov, &uio, buf, buflen, off, UIO_READ);
 
 	spinlock_release(&VFILES(CUR_FDS(fd))->vf_lock);
 
@@ -181,7 +195,7 @@ int sys_write(int fd, const userptr_t buf, size_t buflen, int *retval) {
 	spinlock_acquire(&VFILES(CUR_FDS(fd))->vf_lock); // protect access to vf_offset
 
 	off_t off = VFILES(CUR_FDS(fd))->vf_offset;
-	uio_uinit(&iov, &uio, buf, buflen, off, UIO_WRITE, curproc->p_addrspace);
+	uio_uinit(&iov, &uio, buf, buflen, off, UIO_WRITE);
 
 	spinlock_release(&VFILES(CUR_FDS(fd))->vf_lock);
 
@@ -290,7 +304,7 @@ int sys___getcwd(userptr_t buf, size_t buflen, int *retval) {
 	struct iovec iov;
 	struct uio uio;
 
-	uio_uinit(&iov, &uio, buf, buflen, 0, UIO_READ, curproc->p_addrspace);
+	uio_uinit(&iov, &uio, buf, buflen, 0, UIO_READ);
 
 	int err = vfs_getcwd(&uio);
 	if(err != 0)
