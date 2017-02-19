@@ -127,7 +127,7 @@ int sys_open(char* pathname, int flags, int *retval) {
 	vf->vf_refcount = 1;
 
 	if(add_vfile(vf, fd) != 0)	{	// add the appropriate entries to the per-process
-		goto err4;					// and global file descriptor tables
+		goto err4;						// and global file descriptor tables
 	}
 	
 	if(retval != NULL)
