@@ -33,6 +33,35 @@
 #include <spinlock.h>
 struct uio;
 struct stat;
+struct vfile;
+
+#include <array.h>
+#include <synch.h>
+
+/*
+ * Array of procs.
+ */
+#ifndef VFSINLINE
+#define VFSINLINE INLINE
+#endif
+
+DECLARRAY(vfile, VFSINLINE);
+DEFARRAY(vfile, VFSINLINE);
+
+struct vfile {
+	char* vf_name;
+	struct lock vf_flock; //Offset
+	struct lock vf_rlock; //Refcount (In case of forking, or adding a nonseekable file)
+	off_t vf_offset;
+	struct vnode *vf_vnode;
+	unsigned refcount;
+	mode_t open_mode;
+};
+
+struct vfilearray *k_file_table;
+struct spinlock k_file_lock;
+
+struct vfile *vfile_init(char* vf_name, struct vnode *vf_vnode, int flags);
 
 
 /*
@@ -97,7 +126,8 @@ struct vnode {
  *                      count. However, the uio_resid field should be
  *                      handled in the normal fashion.
  *                      On non-directory objects, return ENOTDIR.
- *
+ * *                      O_TRUNC, as these are handled in the VFS layer.
+
  *    vop_write       - Write data from uio to file at offset specified
  *                      in the uio, updating uio_resid to reflect the
  *                      amount written, and updating uio_offset to match.

@@ -172,3 +172,40 @@ vnode_check(struct vnode *v, const char *opstr)
 
 	spinlock_release(&v->vn_countlock);
 }
+
+struct vfile *vfile_init(char* vf_name, struct vnode *vf_vnode, int flags){
+	struct vfile* out = (struct vfile*) kmalloc(sizeof(struct vfile));
+	if(!out){
+		kprintf("vfile_init: Error in malloccing a new virtual file entry\n");
+		return NULL;
+	}
+	out->vf_name = vf_name;
+	//out->vf_vnode = vf_vnode;
+	out->vf_vnode = (struct vnode*) kmalloc(sizeof(struct vnode));
+	memcpy(out->vf_vnode, vf_vnode, sizeof(struct vnode));
+	struct lock* newLock = lock_create("Vfile_offset");
+	if (!newLock) {
+		kprintf("vfile_init: Error in creating vf_flock\n");
+		goto CLEANUP;
+	}
+	(*out).vf_flock = *newLock; 
+
+	newLock = lock_create("Vfile_refcount");
+	if (!newLock) {
+		kprintf("vfile_init: Error in creating vf_rlock\n");
+		goto CLEANUP;
+	}
+	(*out).vf_rlock = *newLock;
+	if(VOP_ISSEEKABLE(vf_vnode)){
+		out->vf_offset = 0;
+	}else{
+		out->vf_offset = -1; //Offset is meaningless here. Used to quickly detect which files are not seekable.
+	}
+	out->refcount = 0;
+	out->open_mode = flags;
+	return out;
+
+CLEANUP:
+	kfree(out);
+	return NULL;
+}

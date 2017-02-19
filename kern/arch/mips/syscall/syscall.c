@@ -35,6 +35,8 @@
 #include <thread.h>
 #include <current.h>
 #include <syscall.h>
+#include <limits.h>
+#include <copyinout.h>
 
 
 /*
@@ -110,19 +112,30 @@ syscall(struct trapframe *tf)
 			break;
 
 		case SYS_open:
-			err = sys_open((const userptr_t)tf->tf_a0, tf->tf_a1);
+			;
+			size_t len = 0;
+			char *kbuf = kmalloc(sizeof(char) * PATH_MAX);
+			if(kbuf == NULL){
+				err = ENOMEM;
+				break;
+			}
+			err = copyinstr((const userptr_t) tf->tf_a0, kbuf, PATH_MAX, &len);
+			if(err == 0){
+				err = sys_open((userptr_t)kbuf, tf->tf_a1, &retval);
+			}
+			kfree(kbuf);
 			break;
 
 		case SYS_read:
-			err = sys_read(tf->tf_a0, (userptr_t)tf->tf_a1, tf->tf_a2);
+			err = sys_read(tf->tf_a0, (userptr_t)tf->tf_a1, tf->tf_a2, &retval);
 			break;
 
 		case SYS_write:
-			err = sys_write(tf->tf_a0, (const userptr_t)tf->tf_a1, tf->tf_a2);
+			err = sys_write(tf->tf_a0, (const userptr_t)tf->tf_a1, tf->tf_a2, &retval);
 			break;
 
 		case SYS_lseek:
-			err = sys_lseek(tf->tf_a0, tf->tf_a2, tf->tf_a3);
+			err = sys_lseek(tf->tf_a0, tf->tf_a2, tf->tf_a3, &retval);
 			// FIX 64 BIT PARAMETER
 			break;
 
@@ -139,7 +152,7 @@ syscall(struct trapframe *tf)
 			break;
 
 		case SYS___getcwd:
-			err = sys___getcwd((userptr_t)tf->tf_a0, tf->tf_a1);
+			err = sys___getcwd((userptr_t)tf->tf_a0, tf->tf_a1, &retval);
 			break;
 
 		case SYS_getpid:

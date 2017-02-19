@@ -56,6 +56,8 @@
 struct proc *kproc;
 struct procarray *procs;
 
+
+pid_t find_free_pid(void); //Prototype for this function. Move this to the proc.h
 /*
  * Helper function for proc_create().
  */
@@ -63,6 +65,15 @@ pid_t find_free_pid(void) {
 	return 0;
 }
 
+void proc_init_fdt(struct proc *procStruct); //This function initializes the per process file table.
+void proc_init_fdt(struct proc *procStruct){
+	KASSERT(procStruct->p_fds[0] == 0);
+	KASSERT(procStruct->p_fds[1] == 0);
+	KASSERT(procStruct->p_fds[2] == 0);
+	procStruct->p_fds[0] = 0;
+	procStruct->p_fds[1] = 1;
+	procStruct->p_fds[2] = 2;
+}
 /*
  * Create a proc structure.
  */

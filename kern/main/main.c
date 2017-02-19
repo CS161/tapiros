@@ -33,6 +33,8 @@
 
 #include <types.h>
 #include <kern/errno.h>
+#include <kern/fcntl.h> //New import for vfs'ing.
+#include <kern/stat.h>
 #include <kern/reboot.h>
 #include <kern/unistd.h>
 #include <lib.h>
@@ -50,6 +52,7 @@
 #include <syscall.h>
 #include <test.h>
 #include <version.h>
+#include <vnode.h>
 #include "autoconf.h"  // for pseudoconfig
 
 
@@ -72,6 +75,64 @@ static const char harvard_copyright[] =
     "Copyright (c) 2000, 2001-2005, 2008-2011, 2013, 2014\n"
     "   President and Fellows of Harvard College.  All rights reserved.\n";
 
+//DL Note: There is a conflict between how to keep track of readonly/writeonly/readwrite files and how the design doc implements them. 
+//Design doc specifies the name could uniquely identify the file. However, clearly the name is not enough to uniquely identify STDIN, STDOUT and STDERR. 
+//Attention needs to be paid as to whether we should merge the same file into one kernel-level entry 
+//(hence throwing away feature of being able to open file read/write only), or keep separate kernel-level entries for each file mode.
+
+//The specific case of the opening of STDIN/STDOUT/STDERR will be resolved by not using the filepath as the vfile name. However, vfile name cannot
+//be relied upon to uniquely identify a file.
+
+static
+void configure_vfiles(void){
+	k_file_table = vfilearray_create();
+	vfilearray_init(k_file_table);
+	//Error check the creation of the vfilearray.
+	spinlock_init(&k_file_lock);
+	struct vnode *vn;
+	char console[8], name[16];
+	int result; unsigned int arrayRes = 0;
+	spinlock_acquire(&k_file_lock);
+	strcpy(console, "con:"); strcpy(name, "con:STDIN");
+	result = vfs_open(console, O_RDONLY, 0664, &vn); //STDIN opening
+	if (result) {
+		panic("Cannot open STDIN! Err: %s\n", strerror(result));
+	}
+	struct vfile* new_vnode  = vfile_init(name, vn, O_RDONLY);
+	result = vfilearray_add(k_file_table, new_vnode, &arrayRes); //if result of this, then error.
+	if (result) {
+		panic("Cannot add STDIN! Err: %s\n", strerror(result));
+	}
+	KASSERT(arrayRes == 0);
+
+
+	strcpy(console, "con:"); strcpy(name, "con:STDOUT");
+	result = vfs_open(console, O_WRONLY, 0662, &vn); //STDOUT opening
+	if (result) {
+		panic("Cannot open STDOUT! Err: %s\n", strerror(result));
+	}
+	new_vnode = vfile_init(name, vn, O_WRONLY);
+	result = vfilearray_add(k_file_table, new_vnode, &arrayRes);
+	if (result) {
+		panic("Cannot add STDOUT! Err: %s\n", strerror(result));
+	}
+	KASSERT(arrayRes == 1);
+
+
+	strcpy(console, "con:"); strcpy(name, "con:STDERR");
+	result = vfs_open(console, O_WRONLY, 0662, &vn); //STDERR opening
+	if (result) {
+		panic("Cannot open STDERR! Err: %s\n", strerror(result)); //Double faulting. This error message will obviously not print via STDERR!
+	}
+	new_vnode = vfile_init(name, vn, O_WRONLY);
+	result = vfilearray_add(k_file_table, new_vnode, &arrayRes);
+	if (result) {
+		panic("Cannot add STDERR! Err: %s\n", strerror(result));
+	}
+	KASSERT(arrayRes == 2);
+	spinlock_release(&k_file_lock);
+	kfree(vn);
+}
 
 /*
  * Initial boot sequence.
@@ -137,12 +198,14 @@ boot(void)
 
 	kheap_nextgeneration();
 
+	configure_vfiles();
 	/*
 	 * Make sure various things aren't screwed up.
 	 */
 	COMPILE_ASSERT(sizeof(userptr_t) == sizeof(char *));
 	COMPILE_ASSERT(sizeof(*(userptr_t)0) == sizeof(char));
 }
+
 
 /*
  * Shutdown sequence. Opposite to boot().
