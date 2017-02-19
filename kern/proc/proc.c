@@ -55,7 +55,9 @@
  * Helper function for proc_create(). Iterates through procs, and sets
  * proc's pid to the first empty slot (or adds a new one if necessary).
  */
-void set_pid(struct proc *proc) {
+static int set_pid(struct proc *proc) {
+	int err = 0;
+
 	spinlock_acquire(&gp_lock);
 
 	int max = procarray_num(procs);
@@ -68,8 +70,9 @@ void set_pid(struct proc *proc) {
 	}
 
 	if(pid < 0) {
-		procarray_add(procs, proc, NULL);
-		proc->pid = max;
+		err = procarray_add(procs, proc, NULL);
+		if(err == 0)
+			proc->pid = max;
 	}
 	else {
 		procarray_set(procs, pid, proc);
@@ -77,6 +80,8 @@ void set_pid(struct proc *proc) {
 	}
 
 	spinlock_release(&gp_lock);
+
+	return err;
 }
 
 /*
@@ -104,13 +109,16 @@ proc_create(const char *name)
 	if(proc->p_wchan == NULL)
 		goto err4;
 
+	if(set_pid(proc) != 0) // set proc to free pid
+		goto err5;
+
 	spinlock_init(&proc->p_lock);
 	proc->p_numthreads = 0;
 	proc->p_addrspace = NULL;
 	proc->p_cwd = NULL;
 	proc->p_parent = NULL;
 	proc->exit_code = -1;
-	set_pid(proc); // set proc to free pid
+	
 
 	memset(proc->p_fds, -1, MAX_FDS);
 
@@ -118,6 +126,8 @@ proc_create(const char *name)
 
 	// error cleanup
 
+	err5:
+		wchan_destroy(proc->p_wchan);
 	err4:
 		kfree(proc->p_children);
 	err3:

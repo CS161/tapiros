@@ -79,8 +79,6 @@ DEFARRAY(vfile, VFSINLINE);
 struct vfilearray *vfiles;	// global file descriptor table
 struct spinlock gf_lock;	// protects adding/removing entries in vfiles
 
-void set_vfile(struct vfile *vfile, int fd);
-
 /*
  * VFS layer low-level operations.
  * See vnode.h for direct operations on vnodes.

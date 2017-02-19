@@ -142,8 +142,8 @@ void uio_kinit(struct iovec *, struct uio *,
 /*
  * Initialize a uio suitable for I/O from a user buffer.
  */
-void uio_uinit(struct iovec *, struct uio *, userptr_t ubuf, size_t len, 
-			off_t pos, enum uio_rw rw, struct addrspace *addr);
+void uio_uinit(struct iovec *, struct uio *, 
+			userptr_t ubuf, size_t len, off_t pos, enum uio_rw rw);
 
 
 #endif /* _UIO_H_ */
