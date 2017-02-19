@@ -216,13 +216,14 @@ int sys_write(int fd, const userptr_t buf, size_t buflen, int *retval) {
 
 	return 0;
 }
-int sys_lseek(int fd, off_t pos, int whence, int *retval) {
+int sys_lseek(int fd, off_t pos, int whence, int *retval, int *retval2) {
 	if(fd < 0 || fd >= MAX_FDS || CUR_FDS(fd) < 0)	// nefarious user errors
 		return EBADF;
 
 	(void)pos;
 	(void)whence;
 	(void)retval;
+	(void)retval2;
 	// do stuff
 	return 0;
 }

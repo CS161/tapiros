@@ -115,8 +115,7 @@ syscall(struct trapframe *tf)
 		 * Copy the string from the user pointer before calling sys_open so that
 		 * sys_open can be called from within the kernel (e.g. in vfiles_init).
 		 */
-		case SYS_open: 
-			;	// compiler says this is needed between a label and a declaration
+		case SYS_open: {	// brackets so that new variable declarations are properly scoped
 			size_t len = 0;
 			char *kbuf = kmalloc(sizeof(char) * PATH_MAX);
 			if(kbuf == NULL) {
@@ -130,7 +129,7 @@ syscall(struct trapframe *tf)
 
 			kfree(kbuf);
 			break;
-
+		}
 		case SYS_read:
 			err = sys_read(tf->tf_a0, (userptr_t)tf->tf_a1, tf->tf_a2, &retval);
 			break;
@@ -139,11 +138,18 @@ syscall(struct trapframe *tf)
 			err = sys_write(tf->tf_a0, (const userptr_t)tf->tf_a1, tf->tf_a2, &retval);
 			break;
 
-		case SYS_lseek:
-			err = sys_lseek(tf->tf_a0, tf->tf_a2, tf->tf_a3, &retval);
-			// FIX 64 BIT PARAMETER
+		case SYS_lseek: {
+			int whence;
+			int retval2;
+			err = copyin((userptr_t) tf->tf_sp + 16, &whence, sizeof(int));
+			if(err == 0) {
+				err = sys_lseek(tf->tf_a0, ((off_t) tf->tf_a2) << 32 | tf->tf_a3, whence, &retval, &retval2);
+				if(err == 0) {
+					tf->tf_v1 = retval2;
+				}
+			}
 			break;
-
+		}
 		case SYS_close:
 			err = sys_close(tf->tf_a0);
 			break;
