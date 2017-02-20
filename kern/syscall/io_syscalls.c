@@ -18,6 +18,8 @@
 #include <proc.h>
 #include <limits.h>
 #include <copyinout.h>
+#include <kern/seek.h>
+#include <stat.h>
 
 /*
  * Initialize the vfiles array, including stdin, stdout, and stderr.
@@ -220,11 +222,54 @@ int sys_lseek(int fd, off_t pos, int whence, int *retval, int *retval2) {
 	if(fd < 0 || fd >= MAX_FDS || CUR_FDS(fd) < 0)	// nefarious user errors
 		return EBADF;
 
-	(void)pos;
-	(void)whence;
-	(void)retval;
-	(void)retval2;
-	// do stuff
+	struct vfile *vf = VFILES(CUR_FDS(fd));
+
+	if(!VOP_ISSEEKABLE(vf->vf_vnode))
+		return ESPIPE;
+
+	switch(whence) {
+		case SEEK_SET: {
+			if(pos < 0)
+				return EINVAL;
+			spinlock_acquire(&vf->vf_lock);
+
+			vf->vf_offset = pos;
+
+			spinlock_release(&vf->vf_lock);
+			break;
+		}
+		case SEEK_CUR: {
+			if(pos + vf->vf_offset < 0)
+				return EINVAL;
+			spinlock_acquire(&vf->vf_lock);
+
+			vf->vf_offset = pos + vf->vf_offset;
+
+			spinlock_release(&vf->vf_lock);
+			break;
+		}
+		case SEEK_END: {
+			struct stat stats;
+			VOP_STAT(vf->vf_vnode, &stats);
+			if(pos + stats.st_size < 0)
+				return EINVAL;
+			spinlock_acquire(&vf->vf_lock);
+
+			vf->vf_offset = pos + stats.st_size;
+
+			spinlock_release(&vf->vf_lock);
+			break;
+		}
+		default:
+			return EINVAL;
+	}
+
+	if(retval != NULL)
+		*retval = vf->vf_offset >> 32;
+
+	if(retval2 != NULL)
+		*retval2 = vf->vf_offset;
+
 	return 0;
 }
 
