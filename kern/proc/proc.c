@@ -49,6 +49,7 @@
 #include <addrspace.h>
 #include <vnode.h>
 #include <wchan.h>
+#include <vfs.h>
 
 
 /*
@@ -222,9 +223,27 @@ proc_destroy(struct proc *proc)
 
 	wchan_destroy(proc->p_wchan);
 
-	// DECREF FILE DESCRIPTOR TABLE HERE
+	for(int i = 0; i < MAX_FDS; i++) {		// close all open file descriptors
+		if(proc->p_fds[i] >= 0) {		
+			struct vfile *vf = vfilearray_get(vfiles, proc->p_fds[i]);
 
-	procarray_set(procs, proc->pid, NULL);
+			spinlock_acquire(&vf->vf_lock);		// duplicate some functionality from sys_close
+												// because here we use an arbitrary proc, not curproc
+			KASSERT(vf->vf_refcount > 0);
+			vf->vf_refcount--;
+
+			spinlock_release(&vf->vf_lock);
+
+			if(vf->vf_refcount == 0) {
+				kfree(vf->vf_name);
+				vfs_close(vf->vf_vnode);
+				spinlock_cleanup(&vf->vf_lock);
+				kfree(vf);
+			}
+		}
+	}
+
+	procarray_set(procs, proc->pid, NULL);	// remove entry from procs array
 
 	KASSERT(procarray_num(proc->p_children) == 0);
 	kfree(proc->p_children); // must empty array in waitpid() first
