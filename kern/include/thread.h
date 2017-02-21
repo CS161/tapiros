@@ -155,6 +155,11 @@ int thread_fork(const char *name, struct proc *proc,
 __DEAD void thread_exit(void);
 
 /*
+ * Destroy a thread.
+ */
+void thread_destroy(struct thread *thread);
+
+/*
  * Cause the current thread to yield to the next runnable thread, but
  * itself stay runnable.
  * Interrupts need not be disabled.

@@ -60,6 +60,9 @@ DEFARRAY(proc, VFSINLINE);
 struct proc *kproc;			// the process for the kernel; holds all kernel-only threads
 struct procarray *procs;	// global process table
 struct spinlock gp_lock; 	// protects adding/removing entries in procs
+struct proc *p_coffin;			// coffin for orphaned child proc
+struct thread *t_coffin;		// coffin for orphaned child thread
+struct spinlock coffin_lock;	// protects coffin
 
 /*
  * Maximum number of open file descriptors per process.

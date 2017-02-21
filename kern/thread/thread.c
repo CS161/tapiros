@@ -265,12 +265,12 @@ cpu_create(unsigned hardware_number)
  *
  * (Freeing the stack you're actually using to run is ... inadvisable.)
  */
-static
 void
 thread_destroy(struct thread *thread)
 {
 	KASSERT(thread != curthread);
-	KASSERT(thread->t_state != S_RUN);
+	while(thread->t_state == S_RUN);	// almost a race condition! loop
+										// until thread_exit() finishes
 
 	/*
 	 * If you add things to struct thread, be sure to clean them up
