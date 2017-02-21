@@ -269,8 +269,10 @@ void
 thread_destroy(struct thread *thread)
 {
 	KASSERT(thread != curthread);
-	while(thread->t_state == S_RUN);	// almost a race condition! loop
+	while(thread->t_state != S_ZOMBIE);	// almost a race condition! loop
 										// until thread_exit() finishes
+
+	proc_remthread(thread);
 
 	/*
 	 * If you add things to struct thread, be sure to clean them up
@@ -802,15 +804,6 @@ thread_exit(void)
 	cur = curthread;
 
 	KASSERT(cur->t_did_reserve_buffers == false);
-
-	/*
-	 * Detach from our process. You might need to move this action
-	 * around, depending on how your wait/exit works.
-	 */
-	proc_remthread(cur);
-
-	/* Make sure we *are* detached (move this only if you're sure!) */
-	KASSERT(cur->t_proc == NULL);
 
 	/* Check the stack guard band. */
 	thread_checkstack(cur);

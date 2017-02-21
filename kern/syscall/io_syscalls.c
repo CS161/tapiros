@@ -150,6 +150,8 @@ int sys_open(char* pathname, int flags, int *retval) {
 }
 
 int sys_read(int fd, userptr_t buf, size_t buflen, int *retval) {
+	if(buf == NULL)
+		return EFAULT;
 	if(fd < 0 || fd >= MAX_FDS || CUR_FDS(fd) < 0)	// invalid fd
 		return EBADF;
 	if(VFILES(CUR_FDS(fd))->vf_flags == O_WRONLY)	// reads not permitted
@@ -185,6 +187,8 @@ int sys_read(int fd, userptr_t buf, size_t buflen, int *retval) {
 }
 
 int sys_write(int fd, const userptr_t buf, size_t buflen, int *retval) {
+	if(buf == NULL)
+		return EFAULT;
 	if(fd < 0 || fd >= MAX_FDS || CUR_FDS(fd) < 0)	// invalid fd
 		return EBADF;
 	if(VFILES(CUR_FDS(fd))->vf_flags == O_RDONLY)	// writes not permitted
@@ -330,6 +334,9 @@ int sys_dup2(int oldfd, int newfd, int *retval) {
 }
 
 int sys_chdir(const userptr_t pathname) {
+	if(pathname == NULL)
+		return EFAULT;
+
 	int err = 0;
 
 	size_t len = 0;
@@ -347,6 +354,9 @@ int sys_chdir(const userptr_t pathname) {
 }
 
 int sys___getcwd(userptr_t buf, size_t buflen, int *retval) {
+	if(buf == NULL)
+		return EFAULT;
+
 	struct iovec iov;
 	struct uio uio;
 

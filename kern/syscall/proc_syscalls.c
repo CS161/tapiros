@@ -38,10 +38,40 @@ int sys_execv(const userptr_t program, userptr_t argv) {
 }
 
 int sys_waitpid(pid_t pid, userptr_t status, int *retval) {
-	(void)pid;
-	(void)status;
-	(void)retval;
-	// do stuff
+	if(status == NULL)
+		return EFAULT;
+
+	int max = procarray_num(procs);
+	if(pid < 0 || pid > max)
+		return ESRCH;
+
+	struct proc *child = PROCS(pid);
+	if(child == NULL)
+		return ESRCH;
+
+	if(child->p_parent != curproc)	// doesn't need to be synchronized because p_parent
+		return ECHILD;			// could only be changed if the parent process is already dead
+
+	spinlock_acquire(&child->p_lock);
+	if(child->exit_code == -1) {
+		while(child->exit_code == -1) {
+			wchan_sleep(child->p_wchan, &child->p_lock);
+		}
+	}
+	spinlock_release(&child->p_lock);
+
+	int err = copyout(&child->exit_code, status, sizeof(int));
+	if(err != 0)
+		return err;
+
+	if(retval != NULL)
+		*retval = child->exit_code;
+
+	struct proc *p = curthread->t_proc;
+	thread_destroy(curthread);
+	if(p->p_numthreads == 0)
+		proc_destroy(p);
+
 	return 0;
 }
 
@@ -65,19 +95,17 @@ void sys__exit(int exitcode) {
 	spinlock_release(&curproc->p_lock);
 
 	spinlock_acquire(&coffin_lock);
-	if(t_coffin != NULL) {
-		thread_destroy(t_coffin);
-		t_coffin = NULL;
-	}
-	if(p_coffin != NULL) {
-		proc_destroy(p_coffin);
-		p_coffin = NULL;
+	if(coffin != NULL) {
+		struct proc *p = coffin->t_proc;
+
+		thread_destroy(coffin);
+		if(p->p_numthreads == 0)
+			proc_destroy(p);
+
+		coffin = NULL;
 	}
 	if(curproc->p_parent == NULL) {		// this thread is an orphan :(
-		t_coffin = curthread;
-		KASSERT(curproc->p_numthreads == 1);	// no multithreading, so should always be true
-		if(curproc->p_numthreads == 1)
-			p_coffin = curproc;
+		coffin = curthread;
 	}
 	spinlock_release(&coffin_lock);		// might be destroyed through coffin any point after this
 
