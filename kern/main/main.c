@@ -102,6 +102,9 @@ boot(void)
 	kprintf("%s", harvard_copyright);
 	kprintf("\n");
 
+	kprintf("      _,.,.__,--.__,-----.\n   ,\"\"   \'))              `.\n ,\'   e                    ))\n(  .=\'__,                  ,\n `~`     `-\\  /._____,/   /\n          | | )    (  (   ;\n          | | |    / / / /\n  vvVVvvVvVVVvvVVVvvVVvVvvvVvPhSv\n");
+	// from http://ascii.co.uk/art/tapir
+
 	kprintf("TapirOS system version %s (%s #%d)\n",
 		GROUP_VERSION, buildconfig, buildversion);
 	kprintf("\n");
