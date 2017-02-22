@@ -120,7 +120,7 @@ proc_create(const char *name)
 	proc->p_parent = NULL;
 	proc->exit_code = -1;
 
-	memset(proc->p_fds, -1, MAX_FDS);
+	memset(proc->p_fds, -1, MAX_FDS * sizeof(int));
 
 	return proc;
 

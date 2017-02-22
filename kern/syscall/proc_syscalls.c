@@ -25,12 +25,43 @@ int sys_getpid(int *retval) {
 }
 
 int sys_fork(int *retval) {
-	(void)retval;
-	// do stuff
+	int err = 0;
+
+	struct proc *child = proc_create_runprogram(curproc->p_name);
+	if(child == NULL) {
+		err = ENPROC;
+		goto err1;
+	}
+
+	err = as_copy(curproc->p_addrspace, &child->p_addrspace);
+	if(err != 0) {
+		goto err2;
+	}
+
+	err = procarray_add(curproc->p_children, child, NULL);
+	if(err != 0) {
+		err = ENOMEM;
+		goto err3;
+	}
+
+	memcpy(child->p_fds, curproc->p_fds, MAX_FDS * sizeof(int));
+
+	if(retval != NULL)
+		*retval = child->pid;
+
 	return 0;
+
+	err3:
+		as_destroy(child->p_addrspace);
+	err2:
+		proc_destroy(child);
+	err1:
+		return err;
 }
 
 int sys_execv(const userptr_t program, userptr_t argv) {
+	if(program == NULL || argv == NULL)
+		return EFAULT;
 	(void)program;
 	(void)argv;
 	// do stuff
