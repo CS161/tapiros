@@ -105,7 +105,7 @@ boot(void)
 	kprintf(" _____           _       ___  ____\n|_   _|_ _ _ __ (_)_ __ / _ \\/ ___|\n  | |/ _` | '_ \\| | '__| | | \\___ \\\n  | | (_| | |_) | | |  | |_| |___) |\n  |_|\\__,_| .__/|_|_|   \\___/|____/\n           |_|\n");
 	// generated with http://patorjk.com/software/taag/
 
-	kprintf("      _,.,.__,--.__,-----.\n   ,\"\"   \'))              `.\n ,\'   e                    ))\n(  .=\'__,                  ,\n `~`     `-\\  /._____,/   /\n          | | )    (  (   ;\n          | | |    / / / /\n  vvVVvvVvVVVvvVVVvvVVvVvvvVvPhSv\n");
+	kprintf("         _,.,.__,--.__,-----.\n      ,\"\"   \'))              `.\n    ,\'   e                    ))\n   (  .=\'__,                  ,\n    `~`     `-\\  /._____,/   /\n             | | )    (  (   ;\n             | | |    / / / /\n     vvVVvvVvVVVvvVVVvvVVvVvvvV\n");
 	// from http://ascii.co.uk/art/tapir
 
 	kprintf("TapirOS system version %s (%s #%d)\n",
