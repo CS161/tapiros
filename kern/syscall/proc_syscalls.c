@@ -152,6 +152,7 @@ int sys_execv(const userptr_t program, userptr_t argv) {
 		if(err != 0)
 			goto err5;
 
+		klen = 0;
 		copyinstr(uptr, kbuf, ARG_MAX, &klen);
 		char *nargvi = kmalloc(klen * sizeof(char));
 		if(nargvi == NULL) {
@@ -252,6 +253,7 @@ int sys_execv(const userptr_t program, userptr_t argv) {
 	kfree(nargvlens);
 	kfree(nargv);
 	kfree(kprogram);
+
 
 	lock_release(fork_exec_lock);
 

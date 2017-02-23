@@ -106,7 +106,7 @@ int sys_open(char* pathname, int flags, int *retval) {
 		goto err1;
 	}
 
-	struct vfile *vf = kmalloc(sizeof(struct vfile *));
+	struct vfile *vf = kmalloc(sizeof(struct vfile));
 	if(vf == NULL) {
 		err = ENOMEM;
 		goto err1;
@@ -123,6 +123,7 @@ int sys_open(char* pathname, int flags, int *retval) {
 		goto err3;
 	}
 
+
 	spinlock_init(&vf->vf_lock);
 	vf->vf_flags = flags;
 	vf->vf_offset = 0;
@@ -131,7 +132,7 @@ int sys_open(char* pathname, int flags, int *retval) {
 	if(add_vfile(vf, fd) != 0)	{	// add the appropriate entries to the per-process
 		goto err4;						// and global file descriptor tables
 	}
-	
+
 	if(retval != NULL)
 		*retval = fd;
 	return 0;
