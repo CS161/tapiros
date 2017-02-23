@@ -242,7 +242,16 @@ proc_destroy(struct proc *proc)
 		}
 	}
 
+	spinlock_acquire(&gp_lock);
+	unsigned pid = proc->pid;
 	procarray_set(procs, proc->pid, NULL);	// remove entry from procs array
+	while(pid == procarray_num(procs) - 1) {	// last element in array
+		if(PROCS(pid) != NULL)					
+			break;
+		procarray_remove(procs, pid);			// purge NULL entries from end of array
+		pid--;
+	}
+	spinlock_release(&gp_lock);
 
 	KASSERT(procarray_num(proc->p_children) == 0);
 	procarray_destroy(proc->p_children); 	// must empty array in waitpid() first

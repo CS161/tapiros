@@ -285,7 +285,8 @@ int sys_close(int fd) {
 	KASSERT((size_t)CUR_FDS(fd) < vfilearray_num(vfiles));	// these conditions shouldn't be possible
 	KASSERT(VFILES(CUR_FDS(fd)) != NULL);				// without errors in kernel code elsewhere
 
-	struct vfile *vf = VFILES(CUR_FDS(fd));
+	int index = CUR_FDS(fd);
+	struct vfile *vf = VFILES(index);
 	CUR_FDS(fd) = -1;	// mark per-process fd slot as available
 
 	spinlock_acquire(&vf->vf_lock);		// multiple processes might close the same file simultaneously
@@ -302,6 +303,17 @@ int sys_close(int fd) {
 		vfs_close(vf->vf_vnode);
 		spinlock_cleanup(&vf->vf_lock);
 		kfree(vf);
+
+		spinlock_acquire(&gf_lock);
+		vfilearray_set(vfiles, index, NULL);
+		while((unsigned) index == vfilearray_num(vfiles) - 1) {	// last element in array
+			if(VFILES(index) != NULL)					
+				break;
+			vfilearray_remove(vfiles, index);			// purge NULL entries from end of array
+			index--;
+		}
+		spinlock_release(&gf_lock);
+
 	}
 
 	return 0;
