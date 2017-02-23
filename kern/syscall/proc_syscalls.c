@@ -247,7 +247,9 @@ int sys_execv(const userptr_t program, userptr_t argv) {
 	vfs_close(v);
 
 	as_destroy(oaddr);
+	kfree(uptrs);
 	kfree(kbuf);
+	kfree(nargvlens);
 	kfree(nargv);
 	kfree(kprogram);
 
