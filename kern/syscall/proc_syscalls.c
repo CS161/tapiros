@@ -173,6 +173,8 @@ int sys_execv(const userptr_t program, userptr_t argv) {
 		argv += sizeof(userptr_t);
 	}
 
+	int argc = i;
+
 	struct addrspace *naddr = as_create();
 	struct addrspace *oaddr = curproc->p_addrspace;
 	if(naddr == NULL) {
@@ -188,37 +190,58 @@ int sys_execv(const userptr_t program, userptr_t argv) {
 	if(err != 0)
 		goto err6;
 
-	static char zeros[4];	// static, so initialized as 0
-	while(i > 0) {	// fill new address space with parameter strings
+	userptr_t *uptrs = kmalloc(argc * sizeof(userptr_t));
+	if(uptrs == NULL) {
+		err = ENOMEM;
+		goto err6;
+	}
+
+	static char zeros[sizeof(userptr_t)];	// static, so initialized as 0
+	while(i > 0) {							// fill new stack with parameter strings
 		i--;
-		int nzeros = nargvlens[i] % 4;
+		int nzeros = nargvlens[i] % sizeof(userptr_t);	// pad the end with 0s to be 4-aligned (on 32-bit)
 		if(nzeros > 0) {
 			stackptr -= nzeros;
 			err = copyout(zeros, (userptr_t) stackptr, nzeros);
 			if(err != 0)
-				goto err6;
+				goto err7;
 		}
 		stackptr -= nargvlens[i];
-		err = copyout(nargv[i], (userptr_t) stackptr, nargvlens[i]);
+		err = copyout(nargv[i], (userptr_t) stackptr, nargvlens[i]);	// copy the actual string
 		if(err != 0)
-			goto err6;
+			goto err7;
+
+		uptrs[i] = (userptr_t) stackptr;
+
+		KASSERT(stackptr % sizeof(userptr_t) == 0);	// make sure alignment logic works
 	}
-	stackptr -= sizeof(userptr_t);
+	stackptr -= sizeof(userptr_t);									// null-terminate argv
 	err = copyout(zeros, (userptr_t) stackptr, sizeof(userptr_t));
 	if(err != 0)
-		goto err6;
+		goto err7;
+
+	i = argc;
+	while(i > 0) {
+		i--;
+
+		stackptr -= sizeof(userptr_t);
+		userptr_t uptr = uptrs[i];
+		copyout(uptr, (userptr_t) stackptr, sizeof(userptr_t));
+
+		KASSERT(stackptr % sizeof(userptr_t) == 0);
+	}
 
 	vaddr_t entrypoint;
 	struct vnode *v;
 	err = vfs_open(kprogram, O_RDONLY, 0, &v);
 	if(err != 0) {
-		goto err6;
+		goto err7;
 	}
 
 	err = load_elf(v, &entrypoint);
 	if(err != 0) {
 		vfs_close(v);
-		goto err6;
+		goto err7;
 	}
 
 	vfs_close(v);
@@ -230,12 +253,13 @@ int sys_execv(const userptr_t program, userptr_t argv) {
 
 	lock_release(fork_exec_lock);
 
-	enter_new_process(0 /*argc*/, NULL /*userspace addr of argv*/,
-			  NULL /*userspace addr of environment*/,
-			  stackptr, entrypoint);
+	enter_new_process(argc, (userptr_t) stackptr, NULL, stackptr, entrypoint);
 
+	panic("enter_new_process in execv failed (even though it can't fail) :(\n");
 	return EINVAL;
 
+	err7:
+		kfree(uptrs);
 	err6:
 		proc_setas(oaddr);
 		as_activate();
