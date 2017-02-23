@@ -37,6 +37,7 @@
 #include <syscall.h>
 #include <limits.h>
 #include <copyinout.h>
+#include <addrspace.h>
 
 
 /*
@@ -171,7 +172,7 @@ syscall(struct trapframe *tf)
 			break;
 
 		case SYS_fork:
-			err = sys_fork(&retval);
+			err = sys_fork(tf, &retval);
 			break;
 
 		case SYS_execv:
@@ -233,7 +234,17 @@ syscall(struct trapframe *tf)
  * Thus, you can trash it and do things another way if you prefer.
  */
 void
-enter_forked_process(struct trapframe *tf)
+enter_forked_process(void *a, unsigned long b)
 {
-	(void)tf;
+	(void)b;
+	struct trapframe tf;
+	memcpy(&tf, a, sizeof(struct trapframe));	// tf has to be on the stack
+	kfree(a);
+
+	as_activate();
+
+	tf.tf_a3 = 0;		// no error
+	tf.tf_v0 = 0;		// return 0 for child
+	tf.tf_epc += 4;	// advance past fork() call
+	mips_usermode(&tf);
 }

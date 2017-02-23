@@ -281,7 +281,7 @@ int sys_close(int fd) {
 	if(fd < 0 || fd >= MAX_FDS || CUR_FDS(fd) < 0)	// nefarious user errors
 		return EBADF;
 
-	KASSERT((size_t)CUR_FDS(fd) < procarray_num(procs));	// these conditions shouldn't be possible
+	KASSERT((size_t)CUR_FDS(fd) < vfilearray_num(vfiles));	// these conditions shouldn't be possible
 	KASSERT(VFILES(CUR_FDS(fd)) != NULL);				// without errors in kernel code elsewhere
 
 	struct vfile *vf = VFILES(CUR_FDS(fd));

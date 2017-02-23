@@ -16,6 +16,7 @@
 #include <kern/wait.h>
 #include <thread.h>
 #include <wchan.h>
+#include <machine/trapframe.h>
 
 
 int sys_getpid(int *retval) {
@@ -24,37 +25,59 @@ int sys_getpid(int *retval) {
 	return 0;
 }
 
-int sys_fork(int *retval) {
+int sys_fork(struct trapframe *tf, int *retval) {
 	int err = 0;
 
-	struct proc *child = proc_create_runprogram(curproc->p_name);
-	if(child == NULL) {
-		err = ENPROC;
+	struct trapframe *newtf = kmalloc(sizeof(struct trapframe));	// prevent race condition where tf
+	memcpy(newtf, tf, sizeof(struct trapframe));					// (and the stack) go away before 
+																	// enter_forked_process() is reached
+	if(newtf == NULL) {
+		err = ENOMEM;
 		goto err1;
 	}
 
-	err = as_copy(curproc->p_addrspace, &child->p_addrspace);
-	if(err != 0) {
+	struct proc *newp = proc_create_runprogram(curproc->p_name);
+	if(newp == NULL) {
+		err = ENPROC;
 		goto err2;
 	}
 
-	err = procarray_add(curproc->p_children, child, NULL);
+	err = as_copy(curproc->p_addrspace, &newp->p_addrspace);
 	if(err != 0) {
-		err = ENOMEM;
 		goto err3;
 	}
 
-	memcpy(child->p_fds, curproc->p_fds, MAX_FDS * sizeof(int));
+	unsigned index = 0;
+	err = procarray_add(curproc->p_children, newp, &index);
+	if(err != 0) {
+		err = ENOMEM;
+		goto err3;	// proc_destroy destroys address space if assigned
+	}
+
+	if(curproc != kproc)			// since we use a coffin for orphans, we
+		newp->p_parent = curproc;	// don't want to mark kproc as a parent
+
+	memcpy(newp->p_fds, curproc->p_fds, MAX_FDS * sizeof(int));
+
+	err = thread_fork(curthread->t_name, newp, enter_forked_process, (void *)newtf, 0);
+	if(err != 0) {
+		err = ENOMEM;
+		goto err4;
+	}
 
 	if(retval != NULL)
-		*retval = child->pid;
+		*retval = newp->pid;
 
 	return 0;
 
+	// error cleanup
+
+	err4:
+		procarray_remove(curproc->p_children, index);
 	err3:
-		as_destroy(child->p_addrspace);
+		proc_destroy(newp);
 	err2:
-		proc_destroy(child);
+		kfree(newtf);
 	err1:
 		return err;
 }
@@ -98,10 +121,17 @@ int sys_waitpid(pid_t pid, userptr_t status, int *retval) {
 	if(retval != NULL)
 		*retval = child->exit_code;
 
-	struct proc *p = curthread->t_proc;
-	thread_destroy(curthread);
-	if(p->p_numthreads == 0)
-		proc_destroy(p);
+	int index = -1;
+	max = procarray_num(curproc->p_children);
+	for(int i = 0; i < max; i++) {
+		if(procarray_get(curproc->p_children, i) == child) {
+			index = i;
+			break;
+		}
+	}
+	KASSERT(index >= 0);
+	procarray_remove(curproc->p_children, index);
+	proc_destroy(child);
 
 	return 0;
 }
@@ -127,16 +157,11 @@ void sys__exit(int exitcode) {
 
 	spinlock_acquire(&coffin_lock);
 	if(coffin != NULL) {
-		struct proc *p = coffin->t_proc;
-
-		thread_destroy(coffin);
-		if(p->p_numthreads == 0)
-			proc_destroy(p);
-
+		proc_destroy(coffin);
 		coffin = NULL;
 	}
-	if(curproc->p_parent == NULL) {		// this thread is an orphan :(
-		coffin = curthread;
+	if(curproc->p_parent == NULL) {		// this proc is an orphan :(
+		coffin = curproc;
 	}
 	spinlock_release(&coffin_lock);		// might be destroyed through coffin any point after this
 
