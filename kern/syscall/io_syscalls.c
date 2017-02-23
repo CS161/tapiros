@@ -123,7 +123,6 @@ int sys_open(char* pathname, int flags, int *retval) {
 		goto err3;
 	}
 
-
 	spinlock_init(&vf->vf_lock);
 	vf->vf_flags = flags;
 	vf->vf_offset = 0;
@@ -178,11 +177,13 @@ int sys_read(int fd, userptr_t buf, size_t buflen, int *retval) {
 		*retval = uio.uio_offset - off;
 
 
-	spinlock_acquire(&VFILES(CUR_FDS(fd))->vf_lock); 
+	if(VOP_ISSEEKABLE(VFILES(CUR_FDS(fd))->vf_vnode)) {
+		spinlock_acquire(&VFILES(CUR_FDS(fd))->vf_lock); 
 
-	VFILES(CUR_FDS(fd))->vf_offset = uio.uio_offset;
+		VFILES(CUR_FDS(fd))->vf_offset = uio.uio_offset;
 
-	spinlock_release(&VFILES(CUR_FDS(fd))->vf_lock);
+		spinlock_release(&VFILES(CUR_FDS(fd))->vf_lock);
+	}
 
 	return 0;
 }
@@ -206,7 +207,6 @@ int sys_write(int fd, const userptr_t buf, size_t buflen, int *retval) {
 
 	spinlock_release(&VFILES(CUR_FDS(fd))->vf_lock);
 
-
 	int err = VOP_WRITE(VFILES(CUR_FDS(fd))->vf_vnode, &uio);
 	if(err != 0)
 		return err;
@@ -214,12 +214,13 @@ int sys_write(int fd, const userptr_t buf, size_t buflen, int *retval) {
 	if(retval != NULL)
 		*retval = uio.uio_offset - off;
 
+	if(VOP_ISSEEKABLE(VFILES(CUR_FDS(fd))->vf_vnode)) {
+		spinlock_acquire(&VFILES(CUR_FDS(fd))->vf_lock); 
 
-	spinlock_acquire(&VFILES(CUR_FDS(fd))->vf_lock); 
+		VFILES(CUR_FDS(fd))->vf_offset = uio.uio_offset;
 
-	VFILES(CUR_FDS(fd))->vf_offset = uio.uio_offset;
-
-	spinlock_release(&VFILES(CUR_FDS(fd))->vf_lock);
+		spinlock_release(&VFILES(CUR_FDS(fd))->vf_lock);
+	}
 
 	return 0;
 }
