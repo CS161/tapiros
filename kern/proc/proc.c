@@ -59,11 +59,11 @@
 static int set_pid(struct proc *proc) {
 	int err = 0;
 
-	spinlock_acquire(&gp_lock);
+	spinlock_acquire(&gp_lock);			// protect additions to global proc array
 
 	int max = procarray_num(procs);
 	pid_t pid = -1;
-	for(int i = 0; i < max; i++) {
+	for(int i = 0; i < max; i++) {					// find NULL slot
 		if(PROCS(i) == NULL) {
 			pid = i;
 			break;
@@ -71,12 +71,12 @@ static int set_pid(struct proc *proc) {
 	}
 
 	if(pid < 0) {
-		err = procarray_add(procs, proc, NULL);
+		err = procarray_add(procs, proc, NULL);		// if no NULL slot exists, add one instead
 		if(err == 0)
 			proc->pid = max;
 	}
 	else {
-		procarray_set(procs, pid, proc);
+		procarray_set(procs, pid, proc);			// else fill NULL slot
 		proc->pid = pid;
 	}
 
@@ -110,7 +110,7 @@ proc_create(const char *name)
 	if(proc->p_wchan == NULL)
 		goto err4;
 
-	if(set_pid(proc) != 0) // set proc to free pid
+	if(set_pid(proc) != 0) 		// set proc to first free pid
 		goto err5;
 
 	spinlock_init(&proc->p_lock);
@@ -120,7 +120,7 @@ proc_create(const char *name)
 	proc->p_parent = NULL;
 	proc->exit_code = -1;
 
-	memset(proc->p_fds, -1, MAX_FDS * sizeof(int));
+	memset(proc->p_fds, -1, MAX_FDS * sizeof(int));		// default value of per-process fd is -1
 
 	return proc;
 
@@ -244,7 +244,7 @@ proc_destroy(struct proc *proc)
 
 	spinlock_acquire(&gp_lock);
 	unsigned pid = proc->pid;
-	procarray_set(procs, proc->pid, NULL);	// remove entry from procs array
+	procarray_set(procs, proc->pid, NULL);		// remove entry from procs array
 	while(pid == procarray_num(procs) - 1) {	// last element in array
 		if(PROCS(pid) != NULL)					
 			break;
@@ -254,7 +254,7 @@ proc_destroy(struct proc *proc)
 	spinlock_release(&gp_lock);
 
 	KASSERT(procarray_num(proc->p_children) == 0);
-	procarray_destroy(proc->p_children); 	// must empty array in waitpid() first
+	procarray_destroy(proc->p_children); 		// must empty array in waitpid() before calling this
 
 	kfree(proc->p_name);
 	kfree(proc);

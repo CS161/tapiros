@@ -65,7 +65,7 @@ void vfiles_init(void) {
 static int add_vfile(struct vfile *vfile, int fd) {
 	int err = 0;
 
-	spinlock_acquire(&gf_lock);
+	spinlock_acquire(&gf_lock);	// protect additions in the global file array
 
 	int max = vfilearray_num(vfiles);
 	int slot = -1;
@@ -95,24 +95,24 @@ int sys_open(char* pathname, int flags, int *retval) {
 	int err = 0;
 
 	int fd = -1;
-	for(int i = 0; i < MAX_FDS; i++) {
+	for(int i = 0; i < MAX_FDS; i++) {		// find available fd in per-process table
 		if(CUR_FDS(i) == -1) {
 			fd = i;
 			break;
 		}
 	}
-	if(fd == -1) {
+	if(fd == -1) {		// process has too many fds
 		err = EMFILE;
 		goto err1;
 	}
 
 	struct vfile *vf = kmalloc(sizeof(struct vfile));
-	if(vf == NULL) {
+	if(vf == NULL) {	// not enough memory to malloc
 		err = ENOMEM;
 		goto err1;
 	}
 
-	vf->vf_name = kstrdup(pathname);
+	vf->vf_name = kstrdup(pathname);	// parameter will be destroyed by vfs_open
 	if(vf->vf_name == NULL) {
 		err = ENOMEM;
 		goto err2;
@@ -132,7 +132,7 @@ int sys_open(char* pathname, int flags, int *retval) {
 		goto err4;						// and global file descriptor tables
 	}
 
-	if(retval != NULL)
+	if(retval != NULL)	// allow kernel to ignore return value for convenience
 		*retval = fd;
 	return 0;
 
@@ -174,10 +174,10 @@ int sys_read(int fd, userptr_t buf, size_t buflen, int *retval) {
 		return err;
 
 	if(retval != NULL)
-		*retval = uio.uio_offset - off;
+		*retval = uio.uio_offset - off;	// difference in offsets is amount read
 
 
-	if(VOP_ISSEEKABLE(VFILES(CUR_FDS(fd))->vf_vnode)) {
+	if(VOP_ISSEEKABLE(VFILES(CUR_FDS(fd))->vf_vnode)) {	// only increase offset if offsets are meaningful
 		spinlock_acquire(&VFILES(CUR_FDS(fd))->vf_lock); 
 
 		VFILES(CUR_FDS(fd))->vf_offset = uio.uio_offset;
@@ -212,7 +212,7 @@ int sys_write(int fd, const userptr_t buf, size_t buflen, int *retval) {
 		return err;
 
 	if(retval != NULL)
-		*retval = uio.uio_offset - off;
+		*retval = uio.uio_offset - off;	// difference in offsets is amount written
 
 	if(VOP_ISSEEKABLE(VFILES(CUR_FDS(fd))->vf_vnode)) {
 		spinlock_acquire(&VFILES(CUR_FDS(fd))->vf_lock); 
@@ -230,11 +230,11 @@ int sys_lseek(int fd, off_t pos, int whence, int *retval, int *retval2) {
 
 	struct vfile *vf = VFILES(CUR_FDS(fd));
 
-	if(!VOP_ISSEEKABLE(vf->vf_vnode))
+	if(!VOP_ISSEEKABLE(vf->vf_vnode))	// file not seekable
 		return ESPIPE;
 
 	switch(whence) {
-		case SEEK_SET: {
+		case SEEK_SET: {	// pos is absolute position
 			if(pos < 0)
 				return EINVAL;
 			spinlock_acquire(&vf->vf_lock);
@@ -244,7 +244,7 @@ int sys_lseek(int fd, off_t pos, int whence, int *retval, int *retval2) {
 			spinlock_release(&vf->vf_lock);
 			break;
 		}
-		case SEEK_CUR: {
+		case SEEK_CUR: {	// pos is relative to current position
 			if(pos + vf->vf_offset < 0)
 				return EINVAL;
 			spinlock_acquire(&vf->vf_lock);
@@ -254,7 +254,7 @@ int sys_lseek(int fd, off_t pos, int whence, int *retval, int *retval2) {
 			spinlock_release(&vf->vf_lock);
 			break;
 		}
-		case SEEK_END: {
+		case SEEK_END: {	// pos is relative to end of file
 			struct stat stats;
 			VOP_STAT(vf->vf_vnode, &stats);
 			if(pos + stats.st_size < 0)
@@ -274,7 +274,7 @@ int sys_lseek(int fd, off_t pos, int whence, int *retval, int *retval2) {
 		*retval = vf->vf_offset >> 32;
 
 	if(retval2 != NULL)
-		*retval2 = vf->vf_offset;
+		*retval2 = vf->vf_offset;	// combine these two in syscall.c
 
 	return 0;
 }
@@ -322,7 +322,7 @@ int sys_close(int fd) {
 
 int sys_dup2(int oldfd, int newfd, int *retval) {
 	if(oldfd < 0 || oldfd >= MAX_FDS || CUR_FDS(oldfd) < 0 || 
-		newfd < 0 || newfd >= MAX_FDS)
+		newfd < 0 || newfd >= MAX_FDS)	// naughty user
 		return EBADF;
 
 	if(oldfd == newfd) {	// if both fds are the same, do nothing
@@ -354,13 +354,13 @@ int sys_chdir(const userptr_t pathname) {
 	int err = 0;
 
 	size_t len = 0;
-	char *kbuf = kmalloc(sizeof(char) * PATH_MAX);
+	char *kbuf = kmalloc(sizeof(char) * PATH_MAX);	// move parameter into kernel space
 	if(kbuf == NULL)
 		return ENOMEM;
 			
 	err = copyinstr(pathname, kbuf, PATH_MAX, &len);
 	if(err == 0)
-		err = vfs_chdir(kbuf);
+		err = vfs_chdir(kbuf);	// change directory
 
 	kfree(kbuf);
 
@@ -376,11 +376,11 @@ int sys___getcwd(userptr_t buf, size_t buflen, int *retval) {
 
 	uio_uinit(&iov, &uio, buf, buflen, 0, UIO_READ);
 
-	int err = vfs_getcwd(&uio);
+	int err = vfs_getcwd(&uio);	// read working directory to user space
 	if(err != 0)
 		return err;
 
 	if(retval != NULL)
-		*retval = uio.uio_offset;
+		*retval = uio.uio_offset;	// offset is size of path name in bytes
 	return 0;
 }

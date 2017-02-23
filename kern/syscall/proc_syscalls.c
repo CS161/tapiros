@@ -24,14 +24,15 @@
 
 int sys_getpid(int *retval) {
 	KASSERT(retval != NULL);
-	*retval = curproc->pid;
+	*retval = curproc->pid;		// return pid
 	return 0;
 }
 
 int sys_fork(struct trapframe *tf, int *retval) {
 	int err = 0;
 
-	lock_acquire(fork_exec_lock);
+	lock_acquire(fork_exec_lock);	// fork and exec are memory intensive, so we don't want multiple
+									// running simultaneously
 
 	struct trapframe *newtf = kmalloc(sizeof(struct trapframe));	// prevent race condition where tf
 	memcpy(newtf, tf, sizeof(struct trapframe));					// (and the stack) go away before 
@@ -47,7 +48,7 @@ int sys_fork(struct trapframe *tf, int *retval) {
 		goto err2;
 	}
 
-	err = as_copy(curproc->p_addrspace, &newp->p_addrspace);
+	err = as_copy(curproc->p_addrspace, &newp->p_addrspace);	// as defined in dumbvm, for now
 	if(err != 0) {
 		goto err3;
 	}
@@ -79,13 +80,13 @@ int sys_fork(struct trapframe *tf, int *retval) {
 	}
 
 	err = thread_fork(curthread->t_name, newp, enter_forked_process, (void *)newtf, 0);
-	if(err != 0) {
+	if(err != 0) {	// release our baby into the dangerous world that is the cpu runqueue
 		err = ENOMEM;
 		goto err4;
 	}
 
 	if(retval != NULL)
-		*retval = newp->pid;
+		*retval = newp->pid;	// return the child's pid
 
 	lock_release(fork_exec_lock);
 
@@ -105,7 +106,7 @@ int sys_fork(struct trapframe *tf, int *retval) {
 }
 
 int sys_execv(const userptr_t program, userptr_t argv) {
-	if(program == NULL || argv == NULL)
+	if(program == NULL || argv == NULL)		// naughty user
 		return EFAULT;
 
 	int err = 0;
@@ -117,7 +118,7 @@ int sys_execv(const userptr_t program, userptr_t argv) {
 		goto err1;
 
 	size_t klen = 0;
-	err = copyinstr(program, kprogram, PATH_MAX, &klen);
+	err = copyinstr(program, kprogram, PATH_MAX, &klen);	// move program into kernel space
 	if(err != 0) {
 		goto err2;
 	}
@@ -126,20 +127,20 @@ int sys_execv(const userptr_t program, userptr_t argv) {
 		goto err2;
 	}
 
-	char **nargv = kmalloc(ARG_MAX * sizeof(char *));
+	char **nargv = kmalloc(ARG_MAX * sizeof(char *));	// for the strings argv points to
 	if(nargv == NULL) {
 		err = ENOMEM;
 		goto err2;
 	}
 
-	size_t *nargvlens = kmalloc(ARG_MAX * sizeof(size_t));
+	size_t *nargvlens = kmalloc(ARG_MAX * sizeof(size_t));	// length of each string
 	if(nargvlens == NULL) {
 		err = ENOMEM;
 		goto err3;
 	}
 
-	char *kbuf = kmalloc(ARG_MAX * sizeof(char));
-	if(kbuf == NULL) {
+	char *kbuf = kmalloc(ARG_MAX * sizeof(char));	// intermediate buffer of maximum length
+	if(kbuf == NULL) {								// before transferring into one of the right size
 		err = ENOMEM;
 		goto err4;
 	}
@@ -148,36 +149,36 @@ int sys_execv(const userptr_t program, userptr_t argv) {
 	size_t argvlen = 0;
 	while(argv != NULL)	{	// extract parameter strings and lengths
 		userptr_t uptr = NULL;
-		err = copyin(argv, &uptr, sizeof(userptr_t));
+		err = copyin(argv, &uptr, sizeof(userptr_t));	// get argv[i] basically (userptr_t)
 		if(err != 0)
 			goto err5;
 
 		klen = 0;
-		copyinstr(uptr, kbuf, ARG_MAX, &klen);
+		copyinstr(uptr, kbuf, ARG_MAX, &klen);	// get *argv[i] basically (in kbuf)
 		char *nargvi = kmalloc(klen * sizeof(char));
 		if(nargvi == NULL) {
 			err = ENOMEM;
 			goto err5;
 		}
 
-		argvlen += klen;
-		if(argvlen > ARG_MAX) {
+		argvlen += klen;	// keep track of total string length
+		if(argvlen > ARG_MAX) {		// total parameter length is too long
 			err = E2BIG;
 			goto err5;
 		}
 
-		memcpy(nargvi, kbuf, klen * sizeof(char));
+		memcpy(nargvi, kbuf, klen * sizeof(char));	// copy kbuf's contents into a region without extra space
 		nargv[i] = nargvi;
 		nargvlens[i] = klen;
 
 		i++;
-		argv += sizeof(userptr_t);
+		argv += sizeof(userptr_t);	// go to argv[i+1] (but you can't use that syntax with userptr_t)
 	}
 
 	int argc = i;
 
-	struct addrspace *naddr = as_create();
-	struct addrspace *oaddr = curproc->p_addrspace;
+	struct addrspace *naddr = as_create();				// make a new address space
+	struct addrspace *oaddr = curproc->p_addrspace;		// but keep the old one in case execv fails and we need to abort
 	if(naddr == NULL) {
 		err = ENOMEM;
 		goto err5;
@@ -187,18 +188,18 @@ int sys_execv(const userptr_t program, userptr_t argv) {
 	as_activate();
 
 	vaddr_t stackptr;
-	err = as_define_stack(naddr, &stackptr);
+	err = as_define_stack(naddr, &stackptr);	// create stack
 	if(err != 0)
 		goto err6;
 
-	userptr_t *uptrs = kmalloc(argc * sizeof(userptr_t));
+	userptr_t *uptrs = kmalloc(argc * sizeof(userptr_t));	// keep track of where on the new stack params go
 	if(uptrs == NULL) {
 		err = ENOMEM;
 		goto err6;
 	}
 
-	static char zeros[sizeof(userptr_t)];	// static, so initialized as 0
-	while(i > 0) {							// fill new stack with parameter strings
+	static char zeros[sizeof(userptr_t)];				// static, so initialized as 0
+	while(i > 0) {										// fill new stack with parameter strings
 		i--;
 		int nzeros = nargvlens[i] % sizeof(userptr_t);	// pad the end with 0s to be 4-aligned (on 32-bit)
 		if(nzeros > 0) {
@@ -214,7 +215,7 @@ int sys_execv(const userptr_t program, userptr_t argv) {
 
 		uptrs[i] = (userptr_t) stackptr;
 
-		KASSERT(stackptr % sizeof(userptr_t) == 0);	// make sure alignment logic works
+		KASSERT(stackptr % sizeof(userptr_t) == 0);					// make sure alignment logic works
 	}
 	stackptr -= sizeof(userptr_t);									// null-terminate argv
 	err = copyout(zeros, (userptr_t) stackptr, sizeof(userptr_t));
@@ -222,9 +223,8 @@ int sys_execv(const userptr_t program, userptr_t argv) {
 		goto err7;
 
 	i = argc;
-	while(i > 0) {
+	while(i > 0) {							// populate argv pointers on the new stack
 		i--;
-
 		stackptr -= sizeof(userptr_t);
 		userptr_t uptr = uptrs[i];
 		copyout(uptr, (userptr_t) stackptr, sizeof(userptr_t));
@@ -239,7 +239,7 @@ int sys_execv(const userptr_t program, userptr_t argv) {
 		goto err7;
 	}
 
-	err = load_elf(v, &entrypoint);
+	err = load_elf(v, &entrypoint);		// load executable
 	if(err != 0) {
 		vfs_close(v);
 		goto err7;
@@ -247,7 +247,7 @@ int sys_execv(const userptr_t program, userptr_t argv) {
 
 	vfs_close(v);
 
-	as_destroy(oaddr);
+	as_destroy(oaddr);		// clean up all the kmalloced vars
 	kfree(uptrs);
 	kfree(kbuf);
 	kfree(nargvlens);
@@ -261,6 +261,8 @@ int sys_execv(const userptr_t program, userptr_t argv) {
 
 	panic("enter_new_process in execv failed (even though it can't fail) :(\n");
 	return EINVAL;
+
+	// error cleanup
 
 	err7:
 		kfree(uptrs);
@@ -287,7 +289,7 @@ int sys_waitpid(pid_t pid, userptr_t status, int *retval) {
 	if(status == NULL)
 		return EFAULT;
 
-	int max = procarray_num(procs);
+	int max = procarray_num(procs);			// more naughty user mistakes
 	if(pid < 0 || pid > max)
 		return ESRCH;
 
@@ -295,18 +297,18 @@ int sys_waitpid(pid_t pid, userptr_t status, int *retval) {
 	if(child == NULL)
 		return ESRCH;
 
-	if(child->p_parent != curproc)	// doesn't need to be synchronized because p_parent
-		return ECHILD;			// could only be changed if the parent process is already dead
+	if(child->p_parent != curproc)			// doesn't need to be synchronized because p_parent
+		return ECHILD;						// could only be changed if the parent process is already dead
 
 	spinlock_acquire(&child->p_lock);
-	if(child->exit_code == -1) {
+	if(child->exit_code == -1) {			// the "wait" part of waitpid
 		while(child->exit_code == -1) {
 			wchan_sleep(child->p_wchan, &child->p_lock);
 		}
 	}
 	spinlock_release(&child->p_lock);
 
-	int err = copyout(&child->exit_code, status, sizeof(int));
+	int err = copyout(&child->exit_code, status, sizeof(int));	// store the exit code in 'status'
 	if(err != 0)
 		return err;
 
@@ -316,7 +318,7 @@ int sys_waitpid(pid_t pid, userptr_t status, int *retval) {
 	int index = -1;
 	max = procarray_num(curproc->p_children);
 	for(int i = 0; i < max; i++) {
-		if(procarray_get(curproc->p_children, i) == child) {
+		if(procarray_get(curproc->p_children, i) == child) {	// find this child's index in curproc's list
 			index = i;
 			break;
 		}
@@ -353,23 +355,23 @@ void sys__exit(int exitcode) {
 	}
 
 	spinlock_acquire(&curproc->p_lock);
-	curproc->exit_code = _MKWAIT_EXIT(exitcode);
+	curproc->exit_code = _MKWAIT_EXIT(exitcode);	// process exit code with _MKWAIT
 	spinlock_release(&curproc->p_lock);
 
-	struct proc *corpse = NULL;
+	struct proc *corpse = NULL;						// use coffin method to handle orphaned processes
 	spinlock_acquire(&coffin_lock);
 	if(coffin != NULL) {
 		corpse = coffin;
 		coffin = NULL;
 	}
-	if(curproc->p_parent == NULL) {		// this proc is an orphan :(
+	if(curproc->p_parent == NULL) {					// this proc is an orphan :(
 		coffin = curproc;
 	}
-	spinlock_release(&coffin_lock);		// might be destroyed through coffin any point after this
+	spinlock_release(&coffin_lock);					// this proc might be destroyed through the coffin any point after this
 	if(corpse != NULL)
-		proc_destroy(corpse);	// can't be called while holding coffin_lock
+		proc_destroy(corpse);						// can't be called while holding coffin_lock
 
-	if(curproc->p_parent != NULL) {		// if in coffin, this code won't execute anyway
+	if(curproc->p_parent != NULL) {					// if in coffin, this code won't execute anyway
 		spinlock_acquire(&curproc->p_lock);
 		wchan_wakeone(curproc->p_wchan, &curproc->p_lock);	// signal waitpid
 		spinlock_release(&curproc->p_lock);

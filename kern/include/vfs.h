@@ -48,11 +48,11 @@ struct fs;     /* abstract structure for a filesystem (fs.h) */
 struct vnode;  /* abstract structure for an on-disk file (vnode.h) */
 
 struct vfile {
-	char *vf_name;
-	struct vnode *vf_vnode;
-	int vf_flags;
-	off_t vf_offset;
-	int vf_refcount;
+	char *vf_name;				// name, for debugging purposes
+	struct vnode *vf_vnode;		// vnode representing the file
+	int vf_flags;				// O_RDONLY, O_WRONLY, or O_RDWR
+	off_t vf_offset;			// file offset, will be used to set up uios
+	int vf_refcount;			// keeps track of multiple references in dup2, forked procs
 	struct spinlock vf_lock;	// protects refcount and offset access
 };
 
