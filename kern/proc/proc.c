@@ -269,6 +269,7 @@ proc_bootstrap(void)
 
 	spinlock_init(&gp_lock);
 	spinlock_init(&coffin_lock);
+	fork_exec_lock = lock_create("fork_exec_lock");
 }
 
 /*

@@ -18,6 +18,8 @@
 #include <wchan.h>
 #include <machine/trapframe.h>
 #include <vfs.h>
+#include <limits.h>
+#include <kern/fcntl.h>
 
 
 int sys_getpid(int *retval) {
@@ -28,6 +30,8 @@ int sys_getpid(int *retval) {
 
 int sys_fork(struct trapframe *tf, int *retval) {
 	int err = 0;
+
+	lock_acquire(fork_exec_lock);
 
 	struct trapframe *newtf = kmalloc(sizeof(struct trapframe));	// prevent race condition where tf
 	memcpy(newtf, tf, sizeof(struct trapframe));					// (and the stack) go away before 
@@ -83,6 +87,8 @@ int sys_fork(struct trapframe *tf, int *retval) {
 	if(retval != NULL)
 		*retval = newp->pid;
 
+	lock_release(fork_exec_lock);
+
 	return 0;
 
 	// error cleanup
@@ -94,16 +100,159 @@ int sys_fork(struct trapframe *tf, int *retval) {
 	err2:
 		kfree(newtf);
 	err1:
+		lock_release(fork_exec_lock);
 		return err;
 }
 
 int sys_execv(const userptr_t program, userptr_t argv) {
 	if(program == NULL || argv == NULL)
 		return EFAULT;
-	(void)program;
-	(void)argv;
-	// do stuff
-	return 0;
+
+	int err = 0;
+
+	lock_acquire(fork_exec_lock);
+	
+	char *kprogram = kmalloc(sizeof(char) * PATH_MAX);
+	if(kprogram == NULL)
+		goto err1;
+
+	size_t klen = 0;
+	err = copyinstr(program, kprogram, PATH_MAX, &klen);
+	if(err != 0) {
+		goto err2;
+	}
+	if(klen <= 1) {
+		err = ENOENT;
+		goto err2;
+	}
+
+	char **nargv = kmalloc(ARG_MAX * sizeof(char *));
+	if(nargv == NULL) {
+		err = ENOMEM;
+		goto err2;
+	}
+
+	size_t *nargvlens = kmalloc(ARG_MAX * sizeof(size_t));
+	if(nargvlens == NULL) {
+		err = ENOMEM;
+		goto err3;
+	}
+
+	char *kbuf = kmalloc(ARG_MAX * sizeof(char));
+	if(kbuf == NULL) {
+		err = ENOMEM;
+		goto err4;
+	}
+
+	int i = 0;
+	size_t argvlen = 0;
+	while(argv != NULL)	{	// extract parameter strings and lengths
+		userptr_t uptr = NULL;
+		err = copyin(argv, &uptr, sizeof(userptr_t));
+		if(err != 0)
+			goto err5;
+
+		copyinstr(uptr, kbuf, ARG_MAX, &klen);
+		char *nargvi = kmalloc(klen * sizeof(char));
+		if(nargvi == NULL) {
+			err = ENOMEM;
+			goto err5;
+		}
+
+		argvlen += klen;
+		if(argvlen > ARG_MAX) {
+			err = E2BIG;
+			goto err5;
+		}
+
+		memcpy(nargvi, kbuf, klen * sizeof(char));
+		nargv[i] = nargvi;
+		nargvlens[i] = klen;
+
+		i++;
+		argv += sizeof(userptr_t);
+	}
+
+	struct addrspace *naddr = as_create();
+	struct addrspace *oaddr = curproc->p_addrspace;
+	if(naddr == NULL) {
+		err = ENOMEM;
+		goto err5;
+	}
+
+	proc_setas(naddr);
+	as_activate();
+
+	vaddr_t stackptr;
+	err = as_define_stack(naddr, &stackptr);
+	if(err != 0)
+		goto err6;
+
+	static char zeros[4];	// static, so initialized as 0
+	while(i > 0) {	// fill new address space with parameter strings
+		i--;
+		int nzeros = nargvlens[i] % 4;
+		if(nzeros > 0) {
+			stackptr -= nzeros;
+			err = copyout(zeros, (userptr_t) stackptr, nzeros);
+			if(err != 0)
+				goto err6;
+		}
+		stackptr -= nargvlens[i];
+		err = copyout(nargv[i], (userptr_t) stackptr, nargvlens[i]);
+		if(err != 0)
+			goto err6;
+	}
+	stackptr -= sizeof(userptr_t);
+	err = copyout(zeros, (userptr_t) stackptr, sizeof(userptr_t));
+	if(err != 0)
+		goto err6;
+
+	vaddr_t entrypoint;
+	struct vnode *v;
+	err = vfs_open(kprogram, O_RDONLY, 0, &v);
+	if(err != 0) {
+		goto err6;
+	}
+
+	err = load_elf(v, &entrypoint);
+	if(err != 0) {
+		vfs_close(v);
+		goto err6;
+	}
+
+	vfs_close(v);
+
+	as_destroy(oaddr);
+	kfree(kbuf);
+	kfree(nargv);
+	kfree(kprogram);
+
+	lock_release(fork_exec_lock);
+
+	enter_new_process(0 /*argc*/, NULL /*userspace addr of argv*/,
+			  NULL /*userspace addr of environment*/,
+			  stackptr, entrypoint);
+
+	return EINVAL;
+
+	err6:
+		proc_setas(oaddr);
+		as_activate();
+		as_destroy(naddr);
+	err5:
+		for(int j = 0; j < i; j++)
+			kfree(nargv[j]);
+		kfree(kbuf);
+	err4:
+		kfree(nargvlens);
+	err3:
+		kfree(nargv);
+	err2:
+		kfree(kprogram);
+	err1:
+		lock_release(fork_exec_lock);
+		return err;
 }
 
 int sys_waitpid(pid_t pid, userptr_t status, int *retval) {
