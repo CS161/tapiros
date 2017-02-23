@@ -17,6 +17,7 @@
 #include <thread.h>
 #include <wchan.h>
 #include <machine/trapframe.h>
+#include <vfs.h>
 
 
 int sys_getpid(int *retval) {
@@ -57,7 +58,21 @@ int sys_fork(struct trapframe *tf, int *retval) {
 	if(curproc != kproc)			// since we use a coffin for orphans, we
 		newp->p_parent = curproc;	// don't want to mark kproc as a parent
 
-	memcpy(newp->p_fds, curproc->p_fds, MAX_FDS * sizeof(int));
+
+	for(int i = 0; i < MAX_FDS; i++) {		// duplicate all open file descriptors
+		if(curproc->p_fds[i] >= 0) {		
+			struct vfile *vf = vfilearray_get(vfiles, curproc->p_fds[i]);
+
+			spinlock_acquire(&vf->vf_lock);		// duplicate some functionality from sys_close
+												// because here we use an arbitrary proc, not curproc
+			KASSERT(vf->vf_refcount > 0);
+			vf->vf_refcount++;
+
+			spinlock_release(&vf->vf_lock);
+
+			newp->p_fds[i] = curproc->p_fds[i];
+		}
+	}
 
 	err = thread_fork(curthread->t_name, newp, enter_forked_process, (void *)newtf, 0);
 	if(err != 0) {
@@ -138,32 +153,44 @@ int sys_waitpid(pid_t pid, userptr_t status, int *retval) {
 
 void sys__exit(int exitcode) {
 	int max = procarray_num(curproc->p_children);
+	int pids[max];
+	int j = 0;
+
 	for(int i = 0; i < max; i++) {
 		struct proc *p = procarray_get(curproc->p_children, i);
 		spinlock_acquire(&p->p_lock);	// protect against simultaneous parent/child exits
 										// leaving unaware orphans
 		if(p->exit_code != -1) {
-			sys_waitpid(p->pid, NULL, NULL);
+			pids[j] = p->pid;			// waitpid the processes after the loop, otherwise
+			j++;						// indexing gets messed up
 		}
 		else {
 			p->p_parent = NULL;
 		}
+
 		spinlock_release(&p->p_lock);
+	}
+
+	for(int k = 0; k < j; k++) {
+		sys_waitpid(pids[k], NULL, NULL);
 	}
 
 	spinlock_acquire(&curproc->p_lock);
 	curproc->exit_code = _MKWAIT_EXIT(exitcode);
 	spinlock_release(&curproc->p_lock);
 
+	struct proc *corpse = NULL;
 	spinlock_acquire(&coffin_lock);
 	if(coffin != NULL) {
-		proc_destroy(coffin);
+		corpse = coffin;
 		coffin = NULL;
 	}
 	if(curproc->p_parent == NULL) {		// this proc is an orphan :(
 		coffin = curproc;
 	}
 	spinlock_release(&coffin_lock);		// might be destroyed through coffin any point after this
+	if(corpse != NULL)
+		proc_destroy(corpse);	// can't be called while holding coffin_lock
 
 	if(curproc->p_parent != NULL) {		// if in coffin, this code won't execute anyway
 		spinlock_acquire(&curproc->p_lock);

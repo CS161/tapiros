@@ -141,8 +141,7 @@ proc_create(const char *name)
 /*
  * Destroy a proc structure.
  *
- * Note: nothing currently calls this. Your wait/exit code will
- * probably want to do so.
+ * You may not hold a spinlock while calling this.
  */
 void
 proc_destroy(struct proc *proc)
@@ -246,7 +245,7 @@ proc_destroy(struct proc *proc)
 	procarray_set(procs, proc->pid, NULL);	// remove entry from procs array
 
 	KASSERT(procarray_num(proc->p_children) == 0);
-	kfree(proc->p_children); // must empty array in waitpid() first
+	procarray_destroy(proc->p_children); 	// must empty array in waitpid() first
 
 	kfree(proc->p_name);
 	kfree(proc);
