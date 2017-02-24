@@ -98,10 +98,40 @@ runprogram(char *progname)
 		return result;
 	}
 
-	stackptr -= sizeof(userptr_t);
+	// --------------------------- put progname into argv ------------------------
+
+	int err = 0;
+	char zeros[sizeof(userptr_t)];
+	memset(zeros, 0, sizeof(userptr_t));
+	size_t len = strlen(progname);
+	int nzeros = sizeof(userptr_t) - (len % sizeof(userptr_t));	// pad the end with 0s to be 4-aligned (on 32-bit)
+	if(nzeros > 0 && nzeros < 4) {
+		stackptr -= nzeros;
+		err = copyout(zeros, (userptr_t) stackptr, nzeros);
+		if(err != 0)
+			return err;
+		stackptr -= len;
+		err = copyout(progname, (userptr_t) stackptr, len);
+		if(err != 0)
+			return err;
+	}
+	userptr_t pname = (userptr_t) stackptr;
+
+	stackptr -= sizeof(userptr_t);	// null terminate argv
+	err = copyout(zeros, (userptr_t) stackptr, sizeof(userptr_t));
+	if(err != 0)
+		return err;
+
+	stackptr -= sizeof(userptr_t);	// make argv[0]
+	err = copyout(&pname, (userptr_t) stackptr, sizeof(userptr_t));
+	if(err != 0)
+		return err;
+
+	// ---------------------------------------------------------------------------
+	
 
 	/* Warp to user mode. */
-	enter_new_process(0 /*argc*/, stackptr /*userspace addr of argv*/,
+	enter_new_process(1 /*argc*/, (userptr_t) stackptr /*userspace addr of argv*/,
 			  NULL /*userspace addr of environment*/,
 			  stackptr, entrypoint);
 
