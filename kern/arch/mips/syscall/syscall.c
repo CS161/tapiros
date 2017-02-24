@@ -179,16 +179,34 @@ syscall(struct trapframe *tf)
 			err = sys_execv((const userptr_t)tf->tf_a0, (userptr_t)tf->tf_a1);
 			break;
 
-		case SYS_waitpid:
-			err = sys_waitpid(tf->tf_a0, (userptr_t)tf->tf_a1, &retval);
+		case SYS_waitpid: {
+			int status;
+			if((userptr_t)tf->tf_a1 == NULL) {
+				err = EFAULT;
+				break;
+			}
+			
+			err = sys_waitpid(tf->tf_a0, &status, &retval);
+			if(err == 0)
+				err = copyout(&status, (userptr_t)tf->tf_a1, sizeof(int));	// store the exit code in 'status'
 			break;
-
+		}
 		case SYS__exit:
 			sys__exit(tf->tf_a0);
 			err = 0; // so compiler doesn't give me warning
 			break;
 
-	    /* Add more stuff here */
+	    // Recognized but unimplemented syscalls so tests don't abort
+
+		case SYS_remove:
+			err = 0;
+			break;
+
+		case SYS_mkdir:
+			err = 0;
+			break;
+
+		// ----------------------------------------------------------
 
 	    default:
 			kprintf("Unknown syscall %d\n", callno);

@@ -59,25 +59,8 @@ int sys_fork(struct trapframe *tf, int *retval) {
 		err = ENOMEM;
 		goto err3;	// proc_destroy destroys address space if assigned
 	}
-
-	if(curproc != kproc)			// since we use a coffin for orphans, we
-		newp->p_parent = curproc;	// don't want to mark kproc as a parent
-
-
-	for(int i = 0; i < MAX_FDS; i++) {		// duplicate all open file descriptors
-		if(curproc->p_fds[i] >= 0) {		
-			struct vfile *vf = vfilearray_get(vfiles, curproc->p_fds[i]);
-
-			spinlock_acquire(&vf->vf_lock);		// duplicate some functionality from sys_close
-												// because here we use an arbitrary proc, not curproc
-			KASSERT(vf->vf_refcount > 0);
-			vf->vf_refcount++;
-
-			spinlock_release(&vf->vf_lock);
-
-			newp->p_fds[i] = curproc->p_fds[i];
-		}
-	}
+		
+	newp->p_parent = curproc;
 
 	err = thread_fork(curthread->t_name, newp, enter_forked_process, (void *)newtf, 0);
 	if(err != 0) {	// release our baby into the dangerous world that is the cpu runqueue
@@ -119,6 +102,9 @@ int sys_execv(const userptr_t program, userptr_t argv) {
 
 	size_t klen = 0;
 	err = copyinstr(program, kprogram, PATH_MAX, &klen);	// move program into kernel space
+
+	kprintf("kprogram: %s\n",kprogram);
+	
 	if(err != 0) {
 		goto err2;
 	}
@@ -147,14 +133,18 @@ int sys_execv(const userptr_t program, userptr_t argv) {
 
 	int i = 0;
 	size_t argvlen = 0;
-	while(argv != NULL)	{	// extract parameter strings and lengths
+	while(1)	{	// extract parameter strings and lengths
 		userptr_t uptr = NULL;
 		err = copyin(argv, &uptr, sizeof(userptr_t));	// get argv[i] basically (userptr_t)
 		if(err != 0)
 			goto err5;
 
+		if(uptr == NULL)
+			break;
+
 		klen = 0;
 		copyinstr(uptr, kbuf, ARG_MAX, &klen);	// get *argv[i] basically (in kbuf)
+		
 		char *nargvi = kmalloc(klen * sizeof(char));
 		if(nargvi == NULL) {
 			err = ENOMEM;
@@ -187,7 +177,21 @@ int sys_execv(const userptr_t program, userptr_t argv) {
 	proc_setas(naddr);
 	as_activate();
 
-	vaddr_t stackptr;
+	struct vnode *v;
+	vaddr_t entrypoint, stackptr;
+	err = vfs_open(kprogram, O_RDONLY, 0, &v);
+	if(err != 0) {
+		goto err6;
+	}
+
+	err = load_elf(v, &entrypoint);		// load executable
+	if(err != 0) {
+		vfs_close(v);
+		goto err6;
+	}
+
+	vfs_close(v);
+
 	err = as_define_stack(naddr, &stackptr);	// create stack
 	if(err != 0)
 		goto err6;
@@ -232,21 +236,6 @@ int sys_execv(const userptr_t program, userptr_t argv) {
 		KASSERT(stackptr % sizeof(userptr_t) == 0);
 	}
 
-	vaddr_t entrypoint;
-	struct vnode *v;
-	err = vfs_open(kprogram, O_RDONLY, 0, &v);
-	if(err != 0) {
-		goto err7;
-	}
-
-	err = load_elf(v, &entrypoint);		// load executable
-	if(err != 0) {
-		vfs_close(v);
-		goto err7;
-	}
-
-	vfs_close(v);
-
 	as_destroy(oaddr);		// clean up all the kmalloced vars
 	kfree(uptrs);
 	kfree(kbuf);
@@ -285,10 +274,7 @@ int sys_execv(const userptr_t program, userptr_t argv) {
 		return err;
 }
 
-int sys_waitpid(pid_t pid, userptr_t status, int *retval) {
-	if(status == NULL)
-		return EFAULT;
-
+int sys_waitpid(pid_t pid, int *status, int *retval) {
 	int max = procarray_num(procs);			// more naughty user mistakes
 	if(pid < 0 || pid > max)
 		return ESRCH;
@@ -308,12 +294,11 @@ int sys_waitpid(pid_t pid, userptr_t status, int *retval) {
 	}
 	spinlock_release(&child->p_lock);
 
-	int err = copyout(&child->exit_code, status, sizeof(int));	// store the exit code in 'status'
-	if(err != 0)
-		return err;
+	if(status != NULL)
+		*status = child->exit_code;
 
 	if(retval != NULL)
-		*retval = child->exit_code;
+		*retval = child->pid;
 
 	int index = -1;
 	max = procarray_num(curproc->p_children);

@@ -120,7 +120,7 @@ proc_create(const char *name)
 	proc->p_parent = NULL;
 	proc->exit_code = -1;
 
-	memset(proc->p_fds, -1, MAX_FDS * sizeof(int));		// default value of per-process fd is -1
+	memset(proc->p_fds, -1, OPEN_MAX * sizeof(int));		// default value of per-process fd is -1
 
 	return proc;
 
@@ -222,7 +222,7 @@ proc_destroy(struct proc *proc)
 
 	wchan_destroy(proc->p_wchan);
 
-	for(int i = 0; i < MAX_FDS; i++) {		// close all open file descriptors
+	for(int i = 0; i < OPEN_MAX; i++) {		// close all open file descriptors
 		if(proc->p_fds[i] >= 0) {		
 			struct vfile *vf = vfilearray_get(vfiles, proc->p_fds[i]);
 
@@ -303,7 +303,7 @@ proc_create_runprogram(const char *name)
 
 	/* VFS fields */
 
-	for(int i = 0; i < MAX_FDS; i++) {		// duplicate all open file descriptors
+	for(int i = 0; i < OPEN_MAX; i++) {		// duplicate all open file descriptors
 		if(curproc->p_fds[i] >= 0) {		
 			struct vfile *vf = vfilearray_get(vfiles, curproc->p_fds[i]);
 
@@ -317,6 +317,8 @@ proc_create_runprogram(const char *name)
 			newproc->p_fds[i] = curproc->p_fds[i];
 		}
 	}
+
+	newproc->p_parent = curproc;
 
 	/*
 	 * Lock the current process to copy its current directory.

@@ -95,7 +95,7 @@ int sys_open(char* pathname, int flags, int *retval) {
 	int err = 0;
 
 	int fd = -1;
-	for(int i = 0; i < MAX_FDS; i++) {		// find available fd in per-process table
+	for(int i = 0; i < OPEN_MAX; i++) {		// find available fd in per-process table
 		if(CUR_FDS(i) == -1) {
 			fd = i;
 			break;
@@ -152,7 +152,7 @@ int sys_open(char* pathname, int flags, int *retval) {
 int sys_read(int fd, userptr_t buf, size_t buflen, int *retval) {
 	if(buf == NULL)
 		return EFAULT;
-	if(fd < 0 || fd >= MAX_FDS || CUR_FDS(fd) < 0)	// invalid fd
+	if(fd < 0 || fd >= OPEN_MAX || CUR_FDS(fd) < 0)	// invalid fd
 		return EBADF;
 	if(VFILES(CUR_FDS(fd))->vf_flags == O_WRONLY)	// reads not permitted
 		return EBADF;
@@ -191,7 +191,7 @@ int sys_read(int fd, userptr_t buf, size_t buflen, int *retval) {
 int sys_write(int fd, const userptr_t buf, size_t buflen, int *retval) {
 	if(buf == NULL)
 		return EFAULT;
-	if(fd < 0 || fd >= MAX_FDS || CUR_FDS(fd) < 0)		// invalid fd
+	if(fd < 0 || fd >= OPEN_MAX || CUR_FDS(fd) < 0)		// invalid fd
 		return EBADF;
 	if(VFILES(CUR_FDS(fd))->vf_flags == O_RDONLY)		// writes not permitted
 		return EBADF;
@@ -225,7 +225,7 @@ int sys_write(int fd, const userptr_t buf, size_t buflen, int *retval) {
 	return 0;
 }
 int sys_lseek(int fd, off_t pos, int whence, int *retval, int *retval2) {
-	if(fd < 0 || fd >= MAX_FDS || CUR_FDS(fd) < 0)	// nefarious user errors
+	if(fd < 0 || fd >= OPEN_MAX || CUR_FDS(fd) < 0)	// nefarious user errors
 		return EBADF;
 
 	struct vfile *vf = VFILES(CUR_FDS(fd));
@@ -280,7 +280,7 @@ int sys_lseek(int fd, off_t pos, int whence, int *retval, int *retval2) {
 }
 
 int sys_close(int fd) {
-	if(fd < 0 || fd >= MAX_FDS || CUR_FDS(fd) < 0)		// nefarious user errors
+	if(fd < 0 || fd >= OPEN_MAX || CUR_FDS(fd) < 0)		// nefarious user errors
 		return EBADF;
 
 	KASSERT((size_t)CUR_FDS(fd) < vfilearray_num(vfiles));		// these conditions shouldn't be possible
@@ -321,8 +321,8 @@ int sys_close(int fd) {
 }
 
 int sys_dup2(int oldfd, int newfd, int *retval) {
-	if(oldfd < 0 || oldfd >= MAX_FDS || CUR_FDS(oldfd) < 0 || 
-		newfd < 0 || newfd >= MAX_FDS)	// naughty user
+	if(oldfd < 0 || oldfd >= OPEN_MAX || CUR_FDS(oldfd) < 0 || 
+		newfd < 0 || newfd >= OPEN_MAX)	// naughty user
 		return EBADF;
 
 	if(oldfd == newfd) {	// if both fds are the same, do nothing

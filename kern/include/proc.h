@@ -39,6 +39,7 @@
 #include <spinlock.h>
 #include <array.h>
 #include <synch.h>
+#include <limits.h>
 
 struct addrspace;
 struct thread;
@@ -65,10 +66,6 @@ struct proc *coffin;			// coffin for orphaned child thread
 struct spinlock coffin_lock;	// protects coffin
 struct lock *fork_exec_lock;	// protects memory-intensive fork/exec
 
-/*
- * Maximum number of open file descriptors per process.
- */
-#define MAX_FDS 1024
 
 /*
  * Process structure.
@@ -98,7 +95,7 @@ struct proc {
 	pid_t pid;						// process id (index for global process array)
 	struct wchan *p_wchan;			// parent waits on child's wchan
 	struct spinlock p_lock;			// lock for this structure
-	int p_fds[MAX_FDS];				// array of file descriptors
+	int p_fds[OPEN_MAX];			// array of file descriptors
 };
 
 /* This is the process structure for the kernel and for kernel-only threads. */
