@@ -107,7 +107,7 @@ int sys_open(char* pathname, int flags, int *retval) {
 	}
 
 	struct vfile *vf = kmalloc(sizeof(struct vfile));
-	if(vf == NULL) {	// not enough memory to malloc
+	if(vf == NULL) {	// not enough memory to kmalloc
 		err = ENOMEM;
 		goto err1;
 	}
@@ -128,11 +128,11 @@ int sys_open(char* pathname, int flags, int *retval) {
 	vf->vf_offset = 0;
 	vf->vf_refcount = 1;
 
-	if(add_vfile(vf, fd) != 0)	{	// add the appropriate entries to the per-process
+	if(add_vfile(vf, fd) != 0)	{		// add the appropriate entries to the per-process
 		goto err4;						// and global file descriptor tables
 	}
 
-	if(retval != NULL)	// allow kernel to ignore return value for convenience
+	if(retval != NULL)		// allow kernel to ignore return value for convenience
 		*retval = fd;
 	return 0;
 
@@ -174,10 +174,10 @@ int sys_read(int fd, userptr_t buf, size_t buflen, int *retval) {
 		return err;
 
 	if(retval != NULL)
-		*retval = uio.uio_offset - off;	// difference in offsets is amount read
+		*retval = uio.uio_offset - off;		// difference in offsets is amount read
 
 
-	if(VOP_ISSEEKABLE(VFILES(CUR_FDS(fd))->vf_vnode)) {	// only increase offset if offsets are meaningful
+	if(VOP_ISSEEKABLE(VFILES(CUR_FDS(fd))->vf_vnode)) {		// only increase offset if offsets are meaningful
 		spinlock_acquire(&VFILES(CUR_FDS(fd))->vf_lock); 
 
 		VFILES(CUR_FDS(fd))->vf_offset = uio.uio_offset;
@@ -191,16 +191,16 @@ int sys_read(int fd, userptr_t buf, size_t buflen, int *retval) {
 int sys_write(int fd, const userptr_t buf, size_t buflen, int *retval) {
 	if(buf == NULL)
 		return EFAULT;
-	if(fd < 0 || fd >= MAX_FDS || CUR_FDS(fd) < 0)	// invalid fd
+	if(fd < 0 || fd >= MAX_FDS || CUR_FDS(fd) < 0)		// invalid fd
 		return EBADF;
-	if(VFILES(CUR_FDS(fd))->vf_flags == O_RDONLY)	// writes not permitted
+	if(VFILES(CUR_FDS(fd))->vf_flags == O_RDONLY)		// writes not permitted
 		return EBADF;
 
 	struct iovec iov;
 	struct uio uio;
 
 
-	spinlock_acquire(&VFILES(CUR_FDS(fd))->vf_lock); // protect access to vf_offset
+	spinlock_acquire(&VFILES(CUR_FDS(fd))->vf_lock); 	// protect access to vf_offset
 
 	off_t off = VFILES(CUR_FDS(fd))->vf_offset;
 	uio_uinit(&iov, &uio, buf, buflen, off, UIO_WRITE);
@@ -212,7 +212,7 @@ int sys_write(int fd, const userptr_t buf, size_t buflen, int *retval) {
 		return err;
 
 	if(retval != NULL)
-		*retval = uio.uio_offset - off;	// difference in offsets is amount written
+		*retval = uio.uio_offset - off;		// difference in offsets is amount written
 
 	if(VOP_ISSEEKABLE(VFILES(CUR_FDS(fd))->vf_vnode)) {
 		spinlock_acquire(&VFILES(CUR_FDS(fd))->vf_lock); 
@@ -234,7 +234,7 @@ int sys_lseek(int fd, off_t pos, int whence, int *retval, int *retval2) {
 		return ESPIPE;
 
 	switch(whence) {
-		case SEEK_SET: {	// pos is absolute position
+		case SEEK_SET: {						// pos is absolute position
 			if(pos < 0)
 				return EINVAL;
 			spinlock_acquire(&vf->vf_lock);
@@ -244,7 +244,7 @@ int sys_lseek(int fd, off_t pos, int whence, int *retval, int *retval2) {
 			spinlock_release(&vf->vf_lock);
 			break;
 		}
-		case SEEK_CUR: {	// pos is relative to current position
+		case SEEK_CUR: {						// pos is relative to current position
 			if(pos + vf->vf_offset < 0)
 				return EINVAL;
 			spinlock_acquire(&vf->vf_lock);
@@ -254,7 +254,7 @@ int sys_lseek(int fd, off_t pos, int whence, int *retval, int *retval2) {
 			spinlock_release(&vf->vf_lock);
 			break;
 		}
-		case SEEK_END: {	// pos is relative to end of file
+		case SEEK_END: {						// pos is relative to end of file
 			struct stat stats;
 			VOP_STAT(vf->vf_vnode, &stats);
 			if(pos + stats.st_size < 0)
@@ -280,17 +280,17 @@ int sys_lseek(int fd, off_t pos, int whence, int *retval, int *retval2) {
 }
 
 int sys_close(int fd) {
-	if(fd < 0 || fd >= MAX_FDS || CUR_FDS(fd) < 0)	// nefarious user errors
+	if(fd < 0 || fd >= MAX_FDS || CUR_FDS(fd) < 0)		// nefarious user errors
 		return EBADF;
 
-	KASSERT((size_t)CUR_FDS(fd) < vfilearray_num(vfiles));	// these conditions shouldn't be possible
-	KASSERT(VFILES(CUR_FDS(fd)) != NULL);				// without errors in kernel code elsewhere
+	KASSERT((size_t)CUR_FDS(fd) < vfilearray_num(vfiles));		// these conditions shouldn't be possible
+	KASSERT(VFILES(CUR_FDS(fd)) != NULL);						// without errors in kernel code elsewhere
 
 	int index = CUR_FDS(fd);
 	struct vfile *vf = VFILES(index);
-	CUR_FDS(fd) = -1;	// mark per-process fd slot as available
+	CUR_FDS(fd) = -1;							// mark per-process fd slot as available
 
-	spinlock_acquire(&vf->vf_lock);		// multiple processes might close the same file simultaneously
+	spinlock_acquire(&vf->vf_lock);				// multiple processes might close the same file simultaneously
 
 	KASSERT(vf->vf_refcount > 0);
 	vf->vf_refcount--;
@@ -307,7 +307,7 @@ int sys_close(int fd) {
 
 		spinlock_acquire(&gf_lock);
 		vfilearray_set(vfiles, index, NULL);
-		while((unsigned) index == vfilearray_num(vfiles) - 1) {	// last element in array
+		while((unsigned) index == vfilearray_num(vfiles) - 1) {		// last element in array
 			if(VFILES(index) != NULL)					
 				break;
 			vfilearray_remove(vfiles, index);			// purge NULL entries from end of array

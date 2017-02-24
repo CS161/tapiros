@@ -58,12 +58,12 @@ DEFARRAY(proc, VFSINLINE);
 
 #define PROCS(i) procarray_get(procs, i)	// macro to simplify array access
 
-struct proc *kproc;			// the process for the kernel; holds all kernel-only threads
-struct procarray *procs;	// global process table
-struct spinlock gp_lock; 	// protects adding/removing entries in procs
+struct proc *kproc;				// the process for the kernel; holds all kernel-only threads
+struct procarray *procs;		// global process table
+struct spinlock gp_lock; 		// protects adding/removing entries in procs
 struct proc *coffin;			// coffin for orphaned child thread
 struct spinlock coffin_lock;	// protects coffin
-struct lock *fork_exec_lock;		// protects memory intensive fork/exec
+struct lock *fork_exec_lock;	// protects memory-intensive fork/exec
 
 /*
  * Maximum number of open file descriptors per process.

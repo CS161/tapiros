@@ -303,6 +303,21 @@ proc_create_runprogram(const char *name)
 
 	/* VFS fields */
 
+	for(int i = 0; i < MAX_FDS; i++) {		// duplicate all open file descriptors
+		if(curproc->p_fds[i] >= 0) {		
+			struct vfile *vf = vfilearray_get(vfiles, curproc->p_fds[i]);
+
+			spinlock_acquire(&vf->vf_lock);		// duplicate some functionality from sys_close
+												// because here we use an arbitrary proc, not curproc
+			KASSERT(vf->vf_refcount > 0);
+			vf->vf_refcount++;
+
+			spinlock_release(&vf->vf_lock);
+
+			newproc->p_fds[i] = curproc->p_fds[i];
+		}
+	}
+
 	/*
 	 * Lock the current process to copy its current directory.
 	 * (We don't need to lock the new process, though, as we have
