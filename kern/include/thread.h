@@ -56,7 +56,7 @@ struct cpu;
 #define SAME_STACK(p1, p2)     (((p1) & STACK_MASK) == ((p2) & STACK_MASK))
 
 /* Number of context switches per thread per epoch */
-#define EPOCH_SWITCHES 10
+#define EPOCH_SWITCHES 16
 
 
 /* States a thread can be in. */

@@ -667,19 +667,19 @@ thread_switch(threadstate_t newstate, struct wchan *wc, struct spinlock *lk)
 
 	/* The current cpu is now idle. */
 	curcpu->c_isidle = true;
-	next = threadlist_remhead(&curcpu->c_hp_runqueue);
+	next = threadlist_remhead(&curcpu->c_hp_runqueue);	// check for priority threads
 	if(next == NULL) {
 		do {
-			next = threadlist_remhead(&curcpu->c_runqueue);
+			next = threadlist_remhead(&curcpu->c_runqueue);		// check for regular threads
 			if(next == NULL) {
 				do {
-					next = threadlist_remhead(&curcpu->c_waitqueue);
+					next = threadlist_remhead(&curcpu->c_waitqueue);	// check for waiting threads
 					if(next != NULL) {
 						next->priority = false;
-						next->switches_left = EPOCH_SWITCHES;
+						next->switches_left = EPOCH_SWITCHES;			// transfer to regular runqueue
 						threadlist_addhead(&curcpu->c_runqueue, next);
 					}
-				} while (next != NULL);
+				} while (next != NULL);							// wait for new threads
 				spinlock_release(&curcpu->c_runqueue_lock);
 				cpu_idle();
 				spinlock_acquire(&curcpu->c_runqueue_lock);
