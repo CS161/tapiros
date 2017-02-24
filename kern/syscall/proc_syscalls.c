@@ -107,13 +107,16 @@ int sys_execv(const userptr_t program, userptr_t argv) {
 		goto err2;
 	}
 
-	char **nargv = kmalloc(ARG_MAX * sizeof(char *));	// for the strings argv points to
+	// only ARG_MAX / 4 parameters are allowed because otherwise memory runs out way too quickly.
+	// once kfree() actually does something, we can change this back to ARG_MAX
+
+	char **nargv = kmalloc(ARG_MAX/4 * sizeof(char *));	// for the strings argv points to
 	if(nargv == NULL) {
 		err = ENOMEM;
 		goto err2;
 	}
 
-	size_t *nargvlens = kmalloc(ARG_MAX * sizeof(size_t));	// length of each string
+	size_t *nargvlens = kmalloc(ARG_MAX/4 * sizeof(size_t));	// length of each string
 	if(nargvlens == NULL) {
 		err = ENOMEM;
 		goto err3;
@@ -145,8 +148,8 @@ int sys_execv(const userptr_t program, userptr_t argv) {
 			goto err5;
 		}
 
-		argvlen += klen;	// keep track of total string length
-		if(argvlen > ARG_MAX) {		// total parameter length is too long
+		argvlen += klen;								// keep track of total string length
+		if(argvlen > ARG_MAX || i > ARG_MAX/4) {		// total parameter length is too long
 			err = E2BIG;
 			goto err5;
 		}

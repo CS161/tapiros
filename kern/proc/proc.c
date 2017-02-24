@@ -261,8 +261,10 @@ proc_destroy(struct proc *proc)
 	}
 	spinlock_release(&gp_lock);
 
-	KASSERT(procarray_num(proc->p_children) == 0);
-	procarray_destroy(proc->p_children); 		// must empty array in waitpid() before calling this
+	for(int i = procarray_num(proc->p_children); i > 0; i--) {
+		procarray_remove(proc->p_children, 0);
+	}
+	procarray_destroy(proc->p_children); 
 
 	kfree(proc->p_name);
 	kfree(proc);
