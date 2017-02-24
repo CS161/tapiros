@@ -217,6 +217,14 @@ proc_destroy(struct proc *proc)
 		as_destroy(as);
 	}
 
+	spinlock_acquire(&proc->p_lock);
+	while(proc->p_numthreads != 0) {	// wait for thread_exit() to finish
+		spinlock_release(&proc->p_lock);
+		thread_yield();
+		spinlock_acquire(&proc->p_lock);
+	}
+	spinlock_release(&proc->p_lock);
+
 	KASSERT(proc->p_numthreads == 0);
 	spinlock_cleanup(&proc->p_lock);
 

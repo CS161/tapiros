@@ -38,6 +38,7 @@
 #include <limits.h>
 #include <copyinout.h>
 #include <addrspace.h>
+#include <kern/wait.h>
 
 
 /*
@@ -181,13 +182,14 @@ syscall(struct trapframe *tf)
 
 		case SYS_waitpid: {
 			int status;
-			if((userptr_t)tf->tf_a1 == NULL) {
-				err = EFAULT;
+
+			if(tf->tf_a2 || (WNOHANG | WUNTRACED) != (WNOHANG | WUNTRACED)) {	// check valid options even though
+				err = EINVAL;													// I don't implement them
 				break;
 			}
 
 			err = sys_waitpid(tf->tf_a0, &status, &retval);
-			if(err == 0)
+			if(err == 0 && (userptr_t)tf->tf_a1 != NULL)
 				err = copyout(&status, (userptr_t)tf->tf_a1, sizeof(int));	// store the exit code in 'status'
 			break;
 		}

@@ -269,10 +269,9 @@ void
 thread_destroy(struct thread *thread)
 {
 	KASSERT(thread != curthread);
-	while(thread->t_state != S_ZOMBIE);	// almost a race condition! loop
-										// until thread_exit() finishes
-
-	proc_remthread(thread);
+	while(thread->t_state != S_ZOMBIE);	// almost a race condition! loop until thread_exit() finishes
+										// this should be atomic because it's just a set, 
+										// not a get/set (like ++, etc.)
 
 	/*
 	 * If you add things to struct thread, be sure to clean them up
@@ -807,6 +806,8 @@ thread_exit(void)
 
 	/* Check the stack guard band. */
 	thread_checkstack(cur);
+
+	proc_remthread(cur);
 
 	/* Interrupts off on this processor */
         splhigh();

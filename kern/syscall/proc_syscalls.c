@@ -106,10 +106,6 @@ int sys_execv(const userptr_t program, userptr_t argv) {
 	if(err != 0) {
 		goto err2;
 	}
-	if(klen <= 1) {
-		err = ENOENT;
-		goto err2;
-	}
 
 	char **nargv = kmalloc(ARG_MAX * sizeof(char *));	// for the strings argv points to
 	if(nargv == NULL) {
@@ -275,7 +271,7 @@ int sys_execv(const userptr_t program, userptr_t argv) {
 
 int sys_waitpid(pid_t pid, int *status, int *retval) {
 	int max = procarray_num(procs);			// more naughty user mistakes
-	if(pid < 0 || pid > max)
+	if(pid < 0 || pid >= max)
 		return ESRCH;
 
 	struct proc *child = PROCS(pid);
@@ -344,7 +340,7 @@ void sys__exit(int exitcode, int codetype) {
 		curproc->exit_code = _MKWAIT_EXIT(exitcode);	// process exit code
 	if(codetype == 1)
 		curproc->exit_code = _MKWAIT_SIG(exitcode);		// process signal
-	
+
 	spinlock_release(&curproc->p_lock);
 
 	struct proc *corpse = NULL;						// use coffin method to handle orphaned processes
@@ -356,6 +352,7 @@ void sys__exit(int exitcode, int codetype) {
 	if(curproc->p_parent == NULL) {					// this proc is an orphan :(
 		coffin = curproc;
 	}
+
 	spinlock_release(&coffin_lock);					// this proc might be destroyed through the coffin any point after this
 	if(corpse != NULL)
 		proc_destroy(corpse);						// can't be called while holding coffin_lock
