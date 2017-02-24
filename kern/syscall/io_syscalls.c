@@ -154,7 +154,7 @@ int sys_read(int fd, userptr_t buf, size_t buflen, int *retval) {
 		return EFAULT;
 	if(fd < 0 || fd >= OPEN_MAX || CUR_FDS(fd) < 0)	// invalid fd
 		return EBADF;
-	if(VFILES(CUR_FDS(fd))->vf_flags == O_WRONLY)	// reads not permitted
+	if((VFILES(CUR_FDS(fd))->vf_flags & O_ACCMODE) == O_WRONLY)	// reads not permitted
 		return EBADF;
 
 	struct iovec iov;
@@ -193,7 +193,7 @@ int sys_write(int fd, const userptr_t buf, size_t buflen, int *retval) {
 		return EFAULT;
 	if(fd < 0 || fd >= OPEN_MAX || CUR_FDS(fd) < 0)		// invalid fd
 		return EBADF;
-	if(VFILES(CUR_FDS(fd))->vf_flags == O_RDONLY)		// writes not permitted
+	if((VFILES(CUR_FDS(fd))->vf_flags & O_ACCMODE) == O_RDONLY)		// writes not permitted
 		return EBADF;
 
 	struct iovec iov;
