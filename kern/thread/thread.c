@@ -667,7 +667,10 @@ thread_switch(threadstate_t newstate, struct wchan *wc, struct spinlock *lk)
 
 	/* The current cpu is now idle. */
 	curcpu->c_isidle = true;
-	next = threadlist_remhead(&curcpu->c_hp_runqueue);	// check for priority threads
+	if(cur->priority)
+		next = threadlist_remhead(&curcpu->c_hp_runqueue);	// check for priority threads
+	else
+		next = NULL;
 	if(next == NULL) {
 		do {
 			next = threadlist_remhead(&curcpu->c_runqueue);		// check for regular threads
