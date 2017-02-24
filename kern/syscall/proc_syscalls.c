@@ -308,8 +308,8 @@ int sys_waitpid(pid_t pid, int *status, int *retval) {
 			break;
 		}
 	}
-	KASSERT(index >= 0);
-	procarray_remove(curproc->p_children, index);
+	if(index >= 0)	// kproc doesn't keep track of children because it always blocks
+		procarray_remove(curproc->p_children, index);
 	proc_destroy(child);
 
 	return 0;

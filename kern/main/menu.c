@@ -140,10 +140,7 @@ common_prog(int nargs, char **args)
 		return result;
 	}
 
-	kprintf("kproc: %p\n",kproc);
-	kprintf("parent: %p\n",proc->p_parent);
 	sys_waitpid(proc->pid, NULL, NULL);		// prevent input splitting between menu and shell
-	kprintf("FINISHED\n");
 
 	/*
 	 * The new process will be destroyed when the program exits...
