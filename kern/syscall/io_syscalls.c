@@ -134,6 +134,9 @@ int sys_open(char* pathname, int flags, int *retval) {
 
 	if(retval != NULL)		// allow kernel to ignore return value for convenience
 		*retval = fd;
+	
+	curthread->priority = true;		// for scheduling
+
 	return 0;
 
 	// error cleanup
@@ -185,6 +188,8 @@ int sys_read(int fd, userptr_t buf, size_t buflen, int *retval) {
 		spinlock_release(&VFILES(CUR_FDS(fd))->vf_lock);
 	}
 
+	curthread->priority = true;		// for scheduling
+
 	return 0;
 }
 
@@ -221,6 +226,8 @@ int sys_write(int fd, const userptr_t buf, size_t buflen, int *retval) {
 
 		spinlock_release(&VFILES(CUR_FDS(fd))->vf_lock);
 	}
+
+	curthread->priority = true;		// for scheduling
 
 	return 0;
 }
@@ -275,6 +282,8 @@ int sys_lseek(int fd, off_t pos, int whence, int *retval, int *retval2) {
 
 	if(retval2 != NULL)
 		*retval2 = vf->vf_offset;	// combine these two in syscall.c
+
+	curthread->priority = true;		// for scheduling
 
 	return 0;
 }
@@ -344,6 +353,9 @@ int sys_dup2(int oldfd, int newfd, int *retval) {
 
 	if(retval != NULL)
 		*retval = newfd;
+
+	curthread->priority = true;		// for scheduling
+
 	return 0;
 }
 
@@ -363,6 +375,8 @@ int sys_chdir(const userptr_t pathname) {
 		err = vfs_chdir(kbuf);	// change directory
 
 	kfree(kbuf);
+
+	curthread->priority = true;		// for scheduling
 
 	return err;		// 0 upon success
 }

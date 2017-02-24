@@ -55,6 +55,9 @@ struct cpu;
 /* Macro to test if two addresses are on the same kernel stack */
 #define SAME_STACK(p1, p2)     (((p1) & STACK_MASK) == ((p2) & STACK_MASK))
 
+/* Number of context switches per thread per epoch */
+#define EPOCH_SWITCHES 10
+
 
 /* States a thread can be in. */
 typedef enum {
@@ -84,6 +87,9 @@ struct thread {
 	struct cpu *t_cpu;		/* CPU thread runs on */
 	struct proc *t_proc;		/* Process thread belongs to */
 	HANGMAN_ACTOR(t_hangman);	/* Deadlock detector hook */
+
+	bool priority;		// currently set true by certain IO system calls and thread_yield()
+	int switches_left;	// number of context switches left in the current epoch
 
 	/*
 	 * Interrupt state fields.

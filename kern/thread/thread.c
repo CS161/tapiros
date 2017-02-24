@@ -143,6 +143,8 @@ thread_create(const char *name)
 	thread->t_cpu = NULL;
 	thread->t_proc = NULL;
 	HANGMAN_ACTORINIT(&thread->t_hangman, thread->t_name);
+	thread->priority = false;
+	thread->switches_left = EPOCH_SWITCHES;
 
 	/* Interrupt state fields */
 	thread->t_in_interrupt = false;
@@ -187,6 +189,8 @@ cpu_create(unsigned hardware_number)
 
 	c->c_isidle = false;
 	threadlist_init(&c->c_runqueue);
+	threadlist_init(&c->c_hp_runqueue);
+	threadlist_init(&c->c_waitqueue);
 	spinlock_init(&c->c_runqueue_lock);
 
 	c->c_ipi_pending = 0;
@@ -606,27 +610,41 @@ thread_switch(threadstate_t newstate, struct wchan *wc, struct spinlock *lk)
 	/* Put the thread in the right place. */
 	switch (newstate) {
 	    case S_RUN:
-		panic("Illegal S_RUN in thread_switch\n");
+			panic("Illegal S_RUN in thread_switch\n");
 	    case S_READY:
-		thread_make_runnable(cur, true /*have lock*/);
-		break;
+	    	cur->switches_left--;
+	    	if(cur->priority) {
+	    		if(cur->switches_left == 0) {	// move cur back onto the normal runqueue
+	    			cur->priority = false;
+	    			thread_make_runnable(cur, true /*have lock*/);	// allow cur to run one more time
+	    		}
+	    		else
+	    			threadlist_addtail(&curcpu->c_hp_runqueue, cur);
+	    	}
+	    	else {
+	    		if(cur->switches_left <= 0)
+	    			threadlist_addtail(&curcpu->c_waitqueue, cur);
+	    		else
+					thread_make_runnable(cur, true /*have lock*/);
+	    	}
+			break;
 	    case S_SLEEP:
-		cur->t_wchan_name = wc->wc_name;
-		/*
-		 * Add the thread to the list in the wait channel, and
-		 * unlock same. To avoid a race with someone else
-		 * calling wchan_wake*, we must keep the wchan's
-		 * associated spinlock locked from the point the
-		 * caller of wchan_sleep locked it until the thread is
-		 * on the list.
-		 */
-		threadlist_addtail(&wc->wc_threads, cur);
-		spinlock_release(lk);
-		break;
+			cur->t_wchan_name = wc->wc_name;
+			/*
+			 * Add the thread to the list in the wait channel, and
+			 * unlock same. To avoid a race with someone else
+			 * calling wchan_wake*, we must keep the wchan's
+			 * associated spinlock locked from the point the
+			 * caller of wchan_sleep locked it until the thread is
+			 * on the list.
+			 */
+			threadlist_addtail(&wc->wc_threads, cur);
+			spinlock_release(lk);
+			break;
 	    case S_ZOMBIE:
-		cur->t_wchan_name = "ZOMBIE";
-		threadlist_addtail(&curcpu->c_zombies, cur);
-		break;
+			cur->t_wchan_name = "ZOMBIE";
+			threadlist_addtail(&curcpu->c_zombies, cur);
+			break;
 	}
 	cur->t_state = newstate;
 
@@ -649,14 +667,25 @@ thread_switch(threadstate_t newstate, struct wchan *wc, struct spinlock *lk)
 
 	/* The current cpu is now idle. */
 	curcpu->c_isidle = true;
-	do {
-		next = threadlist_remhead(&curcpu->c_runqueue);
-		if (next == NULL) {
-			spinlock_release(&curcpu->c_runqueue_lock);
-			cpu_idle();
-			spinlock_acquire(&curcpu->c_runqueue_lock);
-		}
-	} while (next == NULL);
+	next = threadlist_remhead(&curcpu->c_hp_runqueue);
+	if(next == NULL) {
+		do {
+			next = threadlist_remhead(&curcpu->c_runqueue);
+			if(next == NULL) {
+				do {
+					next = threadlist_remhead(&curcpu->c_waitqueue);
+					if(next != NULL) {
+						next->priority = false;
+						next->switches_left = EPOCH_SWITCHES;
+						threadlist_addhead(&curcpu->c_runqueue, next);
+					}
+				} while (next != NULL);
+				spinlock_release(&curcpu->c_runqueue_lock);
+				cpu_idle();
+				spinlock_acquire(&curcpu->c_runqueue_lock);
+			}
+		} while (next == NULL);
+	}
 	curcpu->c_isidle = false;
 
 	/*
@@ -821,6 +850,7 @@ thread_exit(void)
 void
 thread_yield(void)
 {
+	curthread->priority = true;
 	thread_switch(S_READY, NULL, NULL);
 }
 
