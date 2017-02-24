@@ -314,7 +314,7 @@ int sys_waitpid(pid_t pid, int *status, int *retval) {
 	return 0;
 }
 
-void sys__exit(int exitcode) {
+void sys__exit(int exitcode, int codetype) {
 	int max = procarray_num(curproc->p_children);
 	int pids[max];
 	int j = 0;
@@ -339,7 +339,12 @@ void sys__exit(int exitcode) {
 	}
 
 	spinlock_acquire(&curproc->p_lock);
-	curproc->exit_code = _MKWAIT_EXIT(exitcode);	// process exit code with _MKWAIT
+
+	if(codetype == 0)
+		curproc->exit_code = _MKWAIT_EXIT(exitcode);	// process exit code
+	if(codetype == 1)
+		curproc->exit_code = _MKWAIT_SIG(exitcode);		// process signal
+	
 	spinlock_release(&curproc->p_lock);
 
 	struct proc *corpse = NULL;						// use coffin method to handle orphaned processes

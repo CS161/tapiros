@@ -107,11 +107,11 @@ runprogram(char *progname)
 	int nzeros = sizeof(userptr_t) - (len % sizeof(userptr_t));	// pad the end with 0s to be 4-aligned (on 32-bit)
 	if(nzeros > 0 && nzeros < 4) {
 		stackptr -= nzeros;
-		err = copyout(zeros, (userptr_t) stackptr, nzeros);
+		err = copyout(zeros, (userptr_t) stackptr, nzeros);	// 0 padding
 		if(err != 0)
 			return err;
 		stackptr -= len;
-		err = copyout(progname, (userptr_t) stackptr, len);
+		err = copyout(progname, (userptr_t) stackptr, len);	// copy progname into userspace
 		if(err != 0)
 			return err;
 	}
@@ -122,7 +122,7 @@ runprogram(char *progname)
 	if(err != 0)
 		return err;
 
-	stackptr -= sizeof(userptr_t);	// make argv[0]
+	stackptr -= sizeof(userptr_t);	// make argv[0] pointer to progname in userspace
 	err = copyout(&pname, (userptr_t) stackptr, sizeof(userptr_t));
 	if(err != 0)
 		return err;

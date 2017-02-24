@@ -110,7 +110,7 @@ kill_curthread(vaddr_t epc, unsigned code, vaddr_t vaddr)
 		break;
 	}
 
-	sys__exit(sig);
+	sys__exit(sig, 1 /* signal */);
 }
 
 /*

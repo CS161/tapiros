@@ -185,14 +185,14 @@ syscall(struct trapframe *tf)
 				err = EFAULT;
 				break;
 			}
-			
+
 			err = sys_waitpid(tf->tf_a0, &status, &retval);
 			if(err == 0)
 				err = copyout(&status, (userptr_t)tf->tf_a1, sizeof(int));	// store the exit code in 'status'
 			break;
 		}
 		case SYS__exit:
-			sys__exit(tf->tf_a0);
+			sys__exit(tf->tf_a0, 0 /* exit code, not signal */);
 			err = 0; // so compiler doesn't give me warning
 			break;
 
