@@ -56,7 +56,7 @@ struct cpu;
 #define SAME_STACK(p1, p2)     (((p1) & STACK_MASK) == ((p2) & STACK_MASK))
 
 /* Number of context switches per thread per epoch */
-#define EPOCH_SWITCHES 16
+#define DEPRIORITIZE_THRESHOLD 16
 
 
 /* States a thread can be in. */
@@ -88,8 +88,9 @@ struct thread {
 	struct proc *t_proc;		/* Process thread belongs to */
 	HANGMAN_ACTOR(t_hangman);	/* Deadlock detector hook */
 
-	bool priority;		// currently set true by certain IO system calls and thread_yield()
-	int switches_left;	// number of context switches left in the current epoch
+	bool io_priority;		// set true by certain IO system calls
+	bool sleep_priority;	// set true by wchan_sleep
+	int switches_left;		// used to deprioritize threads over time
 
 	/*
 	 * Interrupt state fields.

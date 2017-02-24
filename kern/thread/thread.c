@@ -143,8 +143,9 @@ thread_create(const char *name)
 	thread->t_cpu = NULL;
 	thread->t_proc = NULL;
 	HANGMAN_ACTORINIT(&thread->t_hangman, thread->t_name);
-	thread->priority = false;
-	thread->switches_left = EPOCH_SWITCHES;
+	thread->io_priority = false;
+	thread->sleep_priority = false;
+	thread->switches_left = DEPRIORITIZE_THRESHOLD;
 
 	/* Interrupt state fields */
 	thread->t_in_interrupt = false;
@@ -189,8 +190,8 @@ cpu_create(unsigned hardware_number)
 
 	c->c_isidle = false;
 	threadlist_init(&c->c_runqueue);
+	threadlist_init(&c->c_mp_runqueue);
 	threadlist_init(&c->c_hp_runqueue);
-	threadlist_init(&c->c_waitqueue);
 	spinlock_init(&c->c_runqueue_lock);
 
 	c->c_ipi_pending = 0;
@@ -613,19 +614,19 @@ thread_switch(threadstate_t newstate, struct wchan *wc, struct spinlock *lk)
 			panic("Illegal S_RUN in thread_switch\n");
 	    case S_READY:
 	    	cur->switches_left--;
-	    	if(cur->priority) {
-	    		if(cur->switches_left == 0) {	// move cur back onto the normal runqueue
-	    			cur->priority = false;
-	    			thread_make_runnable(cur, true /*have lock*/);	// allow cur to run one more time
-	    		}
-	    		else
-	    			threadlist_addtail(&curcpu->c_hp_runqueue, cur);
+	    	if(cur->switches_left == 0) {	// deprioritize thread
+	    		cur->io_priority = false;
+	    		cur->sleep_priority = false;
+	    		thread_make_runnable(cur, true /*have lock*/);
+	    	}
+	    	else if(cur->io_priority && cur->sleep_priority) {
+	    		threadlist_addtail(&curcpu->c_hp_runqueue, cur);
+	    	}
+	    	else if(cur->io_priority || cur->sleep_priority) {
+	    		threadlist_addtail(&curcpu->c_mp_runqueue, cur);
 	    	}
 	    	else {
-	    		if(cur->switches_left <= 0)
-	    			threadlist_addtail(&curcpu->c_waitqueue, cur);
-	    		else
-					thread_make_runnable(cur, true /*have lock*/);
+				thread_make_runnable(cur, true /*have lock*/);
 	    	}
 			break;
 	    case S_SLEEP:
@@ -666,28 +667,43 @@ thread_switch(threadstate_t newstate, struct wchan *wc, struct spinlock *lk)
 	 */
 
 	/* The current cpu is now idle. */
+
+	int which = curcpu->c_hardclocks % 8;	// prevent starvation, weight priorities
+
 	curcpu->c_isidle = true;
-	if(cur->priority)
-		next = threadlist_remhead(&curcpu->c_hp_runqueue);	// check for priority threads
-	else
-		next = NULL;
+
+	struct threadlist *choice1, *choice2, *choice3;
+
+	if(which == 0) {
+		choice1 = &curcpu->c_runqueue;
+		choice2 = &curcpu->c_hp_runqueue;
+		choice3 = &curcpu->c_mp_runqueue;
+	}
+	if(which == 1 || which == 2) {
+		choice1 = &curcpu->c_mp_runqueue;
+		choice2 = &curcpu->c_runqueue;
+		choice3 = &curcpu->c_hp_runqueue;
+	}
+	else {
+		choice1 = &curcpu->c_hp_runqueue;
+		choice2 = &curcpu->c_mp_runqueue;
+		choice3 = &curcpu->c_runqueue;
+	}
+
+	next = threadlist_remhead(choice1);	// check for first choice
 	if(next == NULL) {
-		do {
-			next = threadlist_remhead(&curcpu->c_runqueue);		// check for regular threads
-			if(next == NULL) {
-				do {
-					next = threadlist_remhead(&curcpu->c_waitqueue);	// check for waiting threads
-					if(next != NULL) {
-						next->priority = false;
-						next->switches_left = EPOCH_SWITCHES;			// transfer to regular runqueue
-						threadlist_addhead(&curcpu->c_runqueue, next);
-					}
-				} while (next != NULL);							// wait for new threads
-				spinlock_release(&curcpu->c_runqueue_lock);
-				cpu_idle();
-				spinlock_acquire(&curcpu->c_runqueue_lock);
-			}
-		} while (next == NULL);
+		next = threadlist_remhead(choice2);		// check for second choice
+		if(next == NULL) {
+			next = threadlist_remhead(choice3);		// check for third choice
+		}
+	}
+	while(next == NULL) {	// all queues are empty
+		next = threadlist_remhead(&curcpu->c_runqueue);
+		if (next == NULL) {
+			spinlock_release(&curcpu->c_runqueue_lock);
+			cpu_idle();
+			spinlock_acquire(&curcpu->c_runqueue_lock);
+		}
 	}
 	curcpu->c_isidle = false;
 
@@ -853,7 +869,6 @@ thread_exit(void)
 void
 thread_yield(void)
 {
-	curthread->priority = true;
 	thread_switch(S_READY, NULL, NULL);
 }
 
@@ -1056,6 +1071,8 @@ wchan_sleep(struct wchan *wc, struct spinlock *lk)
 	/* must not hold other spinlocks */
 	KASSERT(curcpu->c_spinlocks == 1);
 
+	curthread->sleep_priority = true;
+	
 	thread_switch(S_SLEEP, wc, lk);
 	spinlock_acquire(lk);
 }

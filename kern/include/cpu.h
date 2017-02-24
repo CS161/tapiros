@@ -67,9 +67,9 @@ struct cpu {
 	 * Protected by the runqueue lock.
 	 */
 	bool c_isidle;			/* True if this cpu is idle */
-	struct threadlist c_runqueue;		/* Run queue for this cpu */
-	struct threadlist c_hp_runqueue;	/* High priority run queue for this cpu (currently for io-dependent threads) */
-	struct threadlist c_waitqueue;		/* Wait queue for those who use all their time in the epoch */
+	struct threadlist c_runqueue;		// Low priority runqueue
+	struct threadlist c_mp_runqueue;	// Mid priority runqueue (sleep or io)
+	struct threadlist c_hp_runqueue;	// High priority runqueue (sleep and io)
 	struct spinlock c_runqueue_lock;
 
 	/*
