@@ -102,8 +102,6 @@ int sys_execv(const userptr_t program, userptr_t argv) {
 
 	size_t klen = 0;
 	err = copyinstr(program, kprogram, PATH_MAX, &klen);	// move program into kernel space
-
-	kprintf("kprogram: %s\n", kprogram);
 	
 	if(err != 0) {
 		goto err2;
@@ -202,13 +200,11 @@ int sys_execv(const userptr_t program, userptr_t argv) {
 		goto err6;
 	}
 
-	static char zeros[sizeof(userptr_t)];				// static, so initialized as 0
+	char zeros[sizeof(userptr_t)];
+	memset(zeros, 0, sizeof(userptr_t));
 	while(i > 0) {										// fill new stack with parameter strings
 		i--;
-		kprintf("stackptr: %p\n", (void *)stackptr);
 		int nzeros = sizeof(userptr_t) - (nargvlens[i] % sizeof(userptr_t));	// pad the end with 0s to be 4-aligned (on 32-bit)
-		kprintf("nzeros: %d\n", nzeros);
-		kprintf("len: %d\n", nargvlens[i]);
 		if(nzeros > 0 && nzeros < 4) {
 			stackptr -= nzeros;
 			err = copyout(zeros, (userptr_t) stackptr, nzeros);
@@ -217,8 +213,6 @@ int sys_execv(const userptr_t program, userptr_t argv) {
 		}
 
 		stackptr -= nargvlens[i];
-		kprintf("stackptr: %p\n", (void *)stackptr);
-		kprintf("nargv[i]: %s\n\n", nargv[i]);
 		err = copyout(nargv[i], (userptr_t) stackptr, nargvlens[i]);	// copy the actual string
 		if(err != 0)
 			goto err7;
@@ -227,21 +221,17 @@ int sys_execv(const userptr_t program, userptr_t argv) {
 
 		KASSERT(stackptr % sizeof(userptr_t) == 0);					// make sure alignment logic works
 	}
-	kprintf("stackptr: %p\n", (void *)stackptr);
 	stackptr -= sizeof(userptr_t);									// null-terminate argv
 	err = copyout(zeros, (userptr_t) stackptr, sizeof(userptr_t));
 	if(err != 0)
 		goto err7;
-	kprintf("stackptr: %p\n\n", (void *)stackptr);
 
 	i = argc;
 	while(i > 0) {							// populate argv pointers on the new stack
 		i--;
-		kprintf("stackptr: %p\n", (void *)stackptr);
 		stackptr -= sizeof(userptr_t);
 		userptr_t uptr = uptrs[i];
-		copyout(uptr, (userptr_t) stackptr, sizeof(userptr_t));
-		kprintf("stackptr: %p\n\n", (void *)stackptr);
+		copyout(&uptr, (userptr_t) stackptr, sizeof(userptr_t));
 		KASSERT(stackptr % sizeof(userptr_t) == 0);
 	}
 
