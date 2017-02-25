@@ -613,10 +613,12 @@ thread_switch(threadstate_t newstate, struct wchan *wc, struct spinlock *lk)
 	    case S_RUN:
 			panic("Illegal S_RUN in thread_switch\n");
 	    case S_READY:
-	    	cur->switches_left--;
+	    	if(cur->io_priority || cur->sleep_priority)
+	    		cur->switches_left--;
 	    	if(cur->switches_left == 0) {	// deprioritize thread
 	    		cur->io_priority = false;
 	    		cur->sleep_priority = false;
+	    		cur->switches_left = 16;
 	    		thread_make_runnable(cur, true /*have lock*/);
 	    	}
 	    	else if(cur->io_priority && cur->sleep_priority) {
@@ -679,8 +681,8 @@ thread_switch(threadstate_t newstate, struct wchan *wc, struct spinlock *lk)
 		choice2 = &curcpu->c_hp_runqueue;
 		choice3 = &curcpu->c_mp_runqueue;
 	}
-	if(which == 1 || which == 2) {
-		choice1 = &curcpu->c_mp_runqueue;
+	if(which == 3 || which == 6) {			// space out threads from the same queue
+		choice1 = &curcpu->c_mp_runqueue;	// (as opposed to which == 1 || which == 2, etc)
 		choice2 = &curcpu->c_runqueue;
 		choice3 = &curcpu->c_hp_runqueue;
 	}
@@ -1072,7 +1074,7 @@ wchan_sleep(struct wchan *wc, struct spinlock *lk)
 	KASSERT(curcpu->c_spinlocks == 1);
 
 	curthread->sleep_priority = true;
-	
+
 	thread_switch(S_SLEEP, wc, lk);
 	spinlock_acquire(lk);
 }
