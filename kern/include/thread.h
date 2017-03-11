@@ -58,6 +58,24 @@ struct cpu;
 /* Number of context switches per thread per epoch */
 #define DEPRIORITIZE_THRESHOLD 16
 
+/* Starvation prevention */
+#define HARDCLOCK_MOD 8
+#define LOW_MOD 8
+#define MED_MOD 3
+/* 
+	These definitions make the following priorities first choice every cycle of 8 (HARDCLOCK_MOD)
+
+	0		1		2		3		4		5		6		7
+	low 	high 	high	med 	high 	high 	med 	high
+
+	low is chosen on multiples of LOW_MOD, med on other multiples of MED_MOD, and high otherwise 
+
+	This scheme is intended both to prevent starvation and give lower priority threads the opportunity
+	to complete actions that escalate their priority. Otherwise unintended behavior happens when the first
+	thread enters the high priority queue.
+*/
+
+
 
 /* States a thread can be in. */
 typedef enum {

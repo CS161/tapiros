@@ -64,8 +64,8 @@ static int set_pid(struct proc *proc) {
 	int max = procarray_num(procs);
 	pid_t pid = -1;
 	for(int i = 0; i < max; i++) {					// find NULL slot
-		if(PROCS(i) == NULL) {
-			pid = i;
+		if(PROCS(i) == NULL) {						// e.g. from exited processes with pids in the middle of the array
+			pid = i;								// pid indexing means we can't remove them from anywhere but the end
 			break;
 		}
 	}
@@ -230,26 +230,6 @@ proc_destroy(struct proc *proc)
 
 	wchan_destroy(proc->p_wchan);
 
-	for(int i = 0; i < OPEN_MAX; i++) {		// close all open file descriptors
-		if(proc->p_fds[i] >= 0) {		
-			struct vfile *vf = vfilearray_get(vfiles, proc->p_fds[i]);
-
-			spinlock_acquire(&vf->vf_lock);		// duplicate some functionality from sys_close
-												// because here we use an arbitrary proc, not curproc
-			KASSERT(vf->vf_refcount > 0);
-			vf->vf_refcount--;
-
-			spinlock_release(&vf->vf_lock);
-
-			if(vf->vf_refcount == 0) {
-				kfree(vf->vf_name);
-				vfs_close(vf->vf_vnode);
-				spinlock_cleanup(&vf->vf_lock);
-				kfree(vf);
-			}
-		}
-	}
-
 	spinlock_acquire(&gp_lock);
 	unsigned pid = proc->pid;
 	procarray_set(procs, proc->pid, NULL);		// remove entry from procs array
@@ -288,7 +268,11 @@ proc_bootstrap(void)
 
 	spinlock_init(&gp_lock);
 	spinlock_init(&coffin_lock);
+	
 	fork_exec_lock = lock_create("fork_exec_lock");
+	if(fork_exec_lock == NULL) {
+		panic("lock_create for fork_exec_lock failed\n");
+	}
 }
 
 /*

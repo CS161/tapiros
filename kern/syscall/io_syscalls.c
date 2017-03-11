@@ -153,8 +153,6 @@ int sys_open(char* pathname, int flags, int *retval) {
 }
 
 int sys_read(int fd, userptr_t buf, size_t buflen, int *retval) {
-	if(buf == NULL)
-		return EFAULT;
 	if(fd < 0 || fd >= OPEN_MAX || CUR_FDS(fd) < 0)	// invalid fd
 		return EBADF;
 	if((VFILES(CUR_FDS(fd))->vf_flags & O_ACCMODE) == O_WRONLY)	// reads not permitted
@@ -194,8 +192,6 @@ int sys_read(int fd, userptr_t buf, size_t buflen, int *retval) {
 }
 
 int sys_write(int fd, const userptr_t buf, size_t buflen, int *retval) {
-	if(buf == NULL)
-		return EFAULT;
 	if(fd < 0 || fd >= OPEN_MAX || CUR_FDS(fd) < 0)		// invalid fd
 		return EBADF;
 	if((VFILES(CUR_FDS(fd))->vf_flags & O_ACCMODE) == O_RDONLY)		// writes not permitted
@@ -252,9 +248,12 @@ int sys_lseek(int fd, off_t pos, int whence, int *retval, int *retval2) {
 			break;
 		}
 		case SEEK_CUR: {						// pos is relative to current position
-			if(pos + vf->vf_offset < 0)
-				return EINVAL;
 			spinlock_acquire(&vf->vf_lock);
+
+			if(pos + vf->vf_offset < 0) {
+				spinlock_release(&vf->vf_lock);
+				return EINVAL;
+			}
 
 			vf->vf_offset = pos + vf->vf_offset;
 
@@ -303,12 +302,11 @@ int sys_close(int fd) {
 
 	KASSERT(vf->vf_refcount > 0);
 	vf->vf_refcount--;
+	int refcount = vf->vf_refcount;
 
 	spinlock_release(&vf->vf_lock);
 
-	// at this point, we only need to touch vf if no one else can,
-	// which means we don't need to worry about synchronization
-	if(vf->vf_refcount == 0) {
+	if(refcount == 0) {
 		kfree(vf->vf_name);
 		vfs_close(vf->vf_vnode);
 		spinlock_cleanup(&vf->vf_lock);
@@ -360,9 +358,6 @@ int sys_dup2(int oldfd, int newfd, int *retval) {
 }
 
 int sys_chdir(const userptr_t pathname) {
-	if(pathname == NULL)
-		return EFAULT;
-
 	int err = 0;
 
 	size_t len = 0;
@@ -382,9 +377,6 @@ int sys_chdir(const userptr_t pathname) {
 }
 
 int sys___getcwd(userptr_t buf, size_t buflen, int *retval) {
-	if(buf == NULL)
-		return EFAULT;
-
 	struct iovec iov;
 	struct uio uio;
 

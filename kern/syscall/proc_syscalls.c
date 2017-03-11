@@ -48,7 +48,7 @@ int sys_fork(struct trapframe *tf, int *retval) {
 		goto err2;
 	}
 
-	err = as_copy(curproc->p_addrspace, &newp->p_addrspace);	// as defined in dumbvm, for now
+	err = as_copy(curproc->p_addrspace, &newp->p_addrspace);
 	if(err != 0) {
 		goto err3;
 	}
@@ -89,9 +89,6 @@ int sys_fork(struct trapframe *tf, int *retval) {
 }
 
 int sys_execv(const userptr_t program, userptr_t argv) {
-	if(program == NULL || argv == NULL)		// naughty user
-		return EFAULT;
-
 	int err = 0;
 
 	lock_acquire(fork_exec_lock);
@@ -140,7 +137,9 @@ int sys_execv(const userptr_t program, userptr_t argv) {
 			break;
 
 		klen = 0;
-		copyinstr(uptr, kbuf, ARG_MAX, &klen);	// get *argv[i] basically (in kbuf)
+		err = copyinstr(uptr, kbuf, ARG_MAX, &klen);	// get *argv[i] basically (in kbuf)
+		if(err != 0)
+			goto err5;
 		
 		char *nargvi = kmalloc(klen * sizeof(char));
 		if(nargvi == NULL) {
@@ -230,7 +229,11 @@ int sys_execv(const userptr_t program, userptr_t argv) {
 		i--;
 		stackptr -= sizeof(userptr_t);
 		userptr_t uptr = uptrs[i];
-		copyout(&uptr, (userptr_t) stackptr, sizeof(userptr_t));
+
+		err = copyout(&uptr, (userptr_t) stackptr, sizeof(userptr_t));
+		if(err != 0)
+			goto err7;
+
 		KASSERT(stackptr % sizeof(userptr_t) == 0);
 	}
 
@@ -286,9 +289,7 @@ int sys_waitpid(pid_t pid, int *status, int *retval) {
 
 	spinlock_acquire(&child->p_lock);
 	if(child->exit_code == -1) {			// the "wait" part of waitpid
-		while(child->exit_code == -1) {
-			wchan_sleep(child->p_wchan, &child->p_lock);
-		}
+		wchan_sleep(child->p_wchan, &child->p_lock);
 	}
 	spinlock_release(&child->p_lock);
 
@@ -318,6 +319,10 @@ void sys__exit(int exitcode, int codetype) {
 	int pids[max];
 	int j = 0;
 
+	for(int i = 0; i < OPEN_MAX; i++) {		// close all open file descriptors
+		sys_close(i);						// sys_close handles invalid fds
+	}
+
 	for(int i = 0; i < max; i++) {
 		struct proc *p = procarray_get(curproc->p_children, i);
 		spinlock_acquire(&p->p_lock);	// protect against simultaneous parent/child exits
@@ -334,7 +339,7 @@ void sys__exit(int exitcode, int codetype) {
 	}
 
 	for(int k = 0; k < j; k++) {
-		sys_waitpid(pids[k], NULL, NULL);
+		sys_waitpid(pids[k], NULL, NULL);	// reap children who have already exited
 	}
 
 	spinlock_acquire(&curproc->p_lock);
@@ -358,7 +363,8 @@ void sys__exit(int exitcode, int codetype) {
 
 	spinlock_release(&coffin_lock);					// this proc might be destroyed through the coffin any point after this
 	if(corpse != NULL)
-		proc_destroy(corpse);						// can't be called while holding coffin_lock
+		proc_destroy(corpse);						// destroy old coffin process
+													// can't be called while holding coffin_lock
 
 	if(curproc->p_parent != NULL) {					// if in coffin, this code won't execute anyway
 		spinlock_acquire(&curproc->p_lock);
@@ -366,7 +372,5 @@ void sys__exit(int exitcode, int codetype) {
 		spinlock_release(&curproc->p_lock);
 	}
 
-	thread_exit();	// Another thread might try to destroy this one before this line,
-					// so I added a busy wait while loop to thread_destroy().
-					// This also protects processes because we always destroy threads first.
+	thread_exit();
 }

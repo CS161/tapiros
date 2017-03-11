@@ -273,10 +273,7 @@ cpu_create(unsigned hardware_number)
 void
 thread_destroy(struct thread *thread)
 {
-	KASSERT(thread != curthread);
-	while(thread->t_state != S_ZOMBIE);	// almost a race condition! loop until thread_exit() finishes
-										// this should be atomic because it's just a set, 
-										// not a get/set (like ++, etc.)
+	KASSERT(thread != curthread);	// S_ZOMBIE already checked in exorcise()
 
 	/*
 	 * If you add things to struct thread, be sure to clean them up
@@ -618,7 +615,7 @@ thread_switch(threadstate_t newstate, struct wchan *wc, struct spinlock *lk)
 	    	if(cur->switches_left == 0) {	// deprioritize thread
 	    		cur->io_priority = false;
 	    		cur->sleep_priority = false;
-	    		cur->switches_left = 16;
+	    		cur->switches_left = DEPRIORITIZE_THRESHOLD;
 	    		thread_make_runnable(cur, true /*have lock*/);
 	    	}
 	    	else if(cur->io_priority && cur->sleep_priority) {
@@ -670,18 +667,18 @@ thread_switch(threadstate_t newstate, struct wchan *wc, struct spinlock *lk)
 
 	/* The current cpu is now idle. */
 
-	int which = curcpu->c_hardclocks % 8;	// prevent starvation, weight priorities
+	int which = curcpu->c_hardclocks % HARDCLOCK_MOD;	// prevent starvation, weight priorities
 
 	curcpu->c_isidle = true;
 
 	struct threadlist *choice1, *choice2, *choice3;
 
-	if(which == 0) {
+	if(which % LOW_MOD == 0) {
 		choice1 = &curcpu->c_runqueue;
 		choice2 = &curcpu->c_hp_runqueue;
 		choice3 = &curcpu->c_mp_runqueue;
 	}
-	if(which == 3 || which == 6) {			// space out threads from the same queue
+	else if(which % MED_MOD == 0) {			// space out threads from the same queue
 		choice1 = &curcpu->c_mp_runqueue;	// (as opposed to which == 1 || which == 2, etc)
 		choice2 = &curcpu->c_runqueue;
 		choice3 = &curcpu->c_hp_runqueue;
