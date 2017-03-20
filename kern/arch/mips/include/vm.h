@@ -83,6 +83,40 @@
  */
 #define USERSTACK     USERSPACETOP
 
+struct page_table_entry {
+	unsigned int addr : 20, : 7;	// address in memory or swap
+	unsigned int x : 1;				// executable
+	unsigned int r : 1;				// readable
+	unsigned int w : 1;				// writeable
+	unsigned int p : 1;				// present
+	unsigned int b : 1;				// busy
+};
+
+struct page_table {
+	uint32_t ptes[1024];
+};
+
+struct page_table_directory {
+	struct page_table* pts[1024];
+};
+
+struct metadata {
+	unsigned int swap : 20, : 5;	// address in swap
+	unsigned int recent : 1;		// recently evicted from TLB
+	unsigned int tlb : 1;			// currently in TLB
+	unsigned int dirty : 1;			// dirty page
+	unsigned int contig : 1;		// end of kernel allocation
+	unsigned int kernel : 1;		// belongs to kernel
+	unsigned int s_pres : 1;		// present in swap
+	unsigned int busy : 1;			// busy
+};
+
+struct core_map_entry {		// maybe redundant alignment bits should be removed and a bitfield used to save space
+	vaddr_t va;
+	struct addrspace *as;
+	struct metadata md;
+};
+
 /*
  * Interface to the low-level module that looks after the amount of
  * physical memory we have.
@@ -117,10 +151,7 @@ paddr_t ram_getfirstfree(void);
  */
 
 struct tlbshootdown {
-	/*
-	 * Change this to what you need for your VM design.
-	 */
-	int ts_placeholder;
+	uint32_t oldentryhi;
 };
 
 #define TLBSHOOTDOWN_MAX 16

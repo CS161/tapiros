@@ -58,7 +58,11 @@ struct addrspace {
         size_t as_npages2;
         paddr_t as_stackpbase;
 #else
-        /* Put stuff here for your VM system */
+        struct page_table_directory *ptd;
+        struct spinlock addr_splk;
+        struct wchan *addr_wchan;
+        vaddr_t heap_bottom;
+        vaddr_t heap_top;
 #endif
 };
 
