@@ -66,6 +66,10 @@ struct proc *coffin;			// coffin for orphaned child thread
 struct spinlock coffin_lock;	// protects coffin
 struct lock *fork_exec_lock;	// protects memory-intensive fork/exec
 
+size_t *nargvlens;				// new argument lengths for execv
+char *nbuf;						// buffer for execv arguments
+char **nargv;					//
+
 
 /*
  * Process structure.

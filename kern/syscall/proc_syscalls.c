@@ -98,31 +98,10 @@ int sys_execv(const userptr_t program, userptr_t argv) {
 		goto err1;
 
 	size_t klen = 0;
-	err = copyinstr(program, kprogram, PATH_MAX, &klen);	// move program into kernel space
+	err = copyinstr(program, kprogram, PATH_MAX, &klen);	// move program name into kernel space
 	
 	if(err != 0) {
 		goto err2;
-	}
-
-	// only ARG_MAX / 4 parameters are allowed because otherwise memory runs out way too quickly.
-	// once kfree() actually does something, we can change this back to ARG_MAX
-
-	char **nargv = kmalloc(ARG_MAX/4 * sizeof(char *));	// for the strings argv points to
-	if(nargv == NULL) {
-		err = ENOMEM;
-		goto err2;
-	}
-
-	size_t *nargvlens = kmalloc(ARG_MAX/4 * sizeof(size_t));	// length of each string
-	if(nargvlens == NULL) {
-		err = ENOMEM;
-		goto err3;
-	}
-
-	char *kbuf = kmalloc(ARG_MAX * sizeof(char));	// intermediate buffer of maximum length
-	if(kbuf == NULL) {								// before transferring into one of the right size
-		err = ENOMEM;
-		goto err4;
 	}
 
 	int i = 0;
@@ -131,29 +110,29 @@ int sys_execv(const userptr_t program, userptr_t argv) {
 		userptr_t uptr = NULL;
 		err = copyin(argv, &uptr, sizeof(userptr_t));	// get argv[i] basically (userptr_t)
 		if(err != 0)
-			goto err5;
+			goto err3;
 
 		if(uptr == NULL)
 			break;
 
 		klen = 0;
-		err = copyinstr(uptr, kbuf, ARG_MAX, &klen);	// get *argv[i] basically (in kbuf)
+		err = copyinstr(uptr, nbuf, ARG_MAX, &klen);	// get *argv[i] basically (in nbuf)
 		if(err != 0)
-			goto err5;
+			goto err3;
 		
 		char *nargvi = kmalloc(klen * sizeof(char));
 		if(nargvi == NULL) {
 			err = ENOMEM;
-			goto err5;
+			goto err3;
 		}
 
 		argvlen += klen;								// keep track of total string length
 		if(argvlen > ARG_MAX || i > ARG_MAX/4) {		// total parameter length is too long
 			err = E2BIG;
-			goto err5;
+			goto err3;
 		}
 
-		memcpy(nargvi, kbuf, klen * sizeof(char));	// copy kbuf's contents into a region without extra space
+		memcpy(nargvi, nbuf, klen * sizeof(char));	// copy nbuf's contents into a region without extra space
 		nargv[i] = nargvi;
 		nargvlens[i] = klen;
 
@@ -167,7 +146,7 @@ int sys_execv(const userptr_t program, userptr_t argv) {
 	struct addrspace *oaddr = curproc->p_addrspace;		// but keep the old one in case execv fails and we need to abort
 	if(naddr == NULL) {
 		err = ENOMEM;
-		goto err5;
+		goto err3;
 	}
 
 	proc_setas(naddr);
@@ -177,25 +156,26 @@ int sys_execv(const userptr_t program, userptr_t argv) {
 	vaddr_t entrypoint, stackptr;
 	err = vfs_open(kprogram, O_RDONLY, 0, &v);
 	if(err != 0) {
-		goto err6;
+		goto err4;
 	}
 
 	err = load_elf(v, &entrypoint);		// load executable
 	if(err != 0) {
 		vfs_close(v);
-		goto err6;
+		goto err4;
 	}
 
 	vfs_close(v);
 
 	err = as_define_stack(naddr, &stackptr);	// create stack
-	if(err != 0)
-		goto err6;
+	if(err != 0) {
+		goto err4;
+	}
 
 	userptr_t *uptrs = kmalloc(argc * sizeof(userptr_t));	// keep track of where on the new stack params go
 	if(uptrs == NULL) {
 		err = ENOMEM;
-		goto err6;
+		goto err4;
 	}
 
 	char zeros[sizeof(userptr_t)];
@@ -207,13 +187,13 @@ int sys_execv(const userptr_t program, userptr_t argv) {
 			stackptr -= nzeros;
 			err = copyout(zeros, (userptr_t) stackptr, nzeros);
 			if(err != 0)
-				goto err7;
+				goto err5;
 		}
 
 		stackptr -= nargvlens[i];
 		err = copyout(nargv[i], (userptr_t) stackptr, nargvlens[i]);	// copy the actual string
 		if(err != 0)
-			goto err7;
+			goto err5;
 
 		uptrs[i] = (userptr_t) stackptr;
 
@@ -222,7 +202,7 @@ int sys_execv(const userptr_t program, userptr_t argv) {
 	stackptr -= sizeof(userptr_t);									// null-terminate argv
 	err = copyout(zeros, (userptr_t) stackptr, sizeof(userptr_t));
 	if(err != 0)
-		goto err7;
+		goto err5;
 
 	i = argc;
 	while(i > 0) {							// populate argv pointers on the new stack
@@ -232,16 +212,13 @@ int sys_execv(const userptr_t program, userptr_t argv) {
 
 		err = copyout(&uptr, (userptr_t) stackptr, sizeof(userptr_t));
 		if(err != 0)
-			goto err7;
+			goto err5;
 
 		KASSERT(stackptr % sizeof(userptr_t) == 0);
 	}
 
 	as_destroy(oaddr);		// clean up all the kmalloced vars
 	kfree(uptrs);
-	kfree(kbuf);
-	kfree(nargvlens);
-	kfree(nargv);
 	kfree(kprogram);
 
 
@@ -254,20 +231,16 @@ int sys_execv(const userptr_t program, userptr_t argv) {
 
 	// error cleanup
 
-	err7:
+	err5:
 		kfree(uptrs);
-	err6:
+	err4:
 		proc_setas(oaddr);
 		as_activate();
 		as_destroy(naddr);
-	err5:
-		for(int j = 0; j < i; j++)
-			kfree(nargv[j]);
-		kfree(kbuf);
-	err4:
-		kfree(nargvlens);
 	err3:
-		kfree(nargv);
+		for(int j = 0; j < i; j++) {
+			kfree(nargv[j]);
+		}
 	err2:
 		kfree(kprogram);
 	err1:

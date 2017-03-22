@@ -268,10 +268,26 @@ proc_bootstrap(void)
 
 	spinlock_init(&gp_lock);
 	spinlock_init(&coffin_lock);
-	
+
 	fork_exec_lock = lock_create("fork_exec_lock");
 	if(fork_exec_lock == NULL) {
 		panic("lock_create for fork_exec_lock failed\n");
+	}
+
+	// only ARG_MAX / 4 parameters are allowed because otherwise it uses so much memory
+	nargvlens = kmalloc(ARG_MAX/4 * sizeof(size_t));
+	if(nargvlens == NULL) {
+		panic("kmalloc for nargvlens failed\n");
+	}
+
+	nargv = kmalloc(ARG_MAX/4 * sizeof(char *));
+	if(nargv == NULL) {
+		panic("kmalloc for nargv failed\n");
+	}
+
+	nbuf = kmalloc(ARG_MAX * sizeof(char));
+	if(nbuf == NULL) {
+		panic("kmalloc for nbuf failed\n");
 	}
 }
 
