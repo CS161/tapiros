@@ -72,7 +72,7 @@ machine mips file    vm/copyinout.c		# copyin/out et al.
 # program as long as that program's not very large.
 defoption   dumbvm
 machine mips optfile dumbvm    arch/mips/vm/dumbvm.c
-machine mips optofffile dumbvm    arch/mips/vm/mipsvm.c
+machine mips optofffile dumbvm	arch/mips/vm/mipsvm.c
 
 #
 # System call layer

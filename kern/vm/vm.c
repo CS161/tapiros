@@ -5,18 +5,6 @@
 #include <vm.h>
 
 
-void vm_bootstrap(void) {
-	panic("Can't vm_boostrap yet! (which means this message will never actually be printed, but whatever)\n");
-}
-
-int vm_fault(int faulttype, vaddr_t faultaddress) {
-	(void) faulttype;
-	(void) faultaddress;
-
-	panic("Can't vm_fault yet!\n");
-	return 0;
-}
-
 vaddr_t alloc_kpages(unsigned npages) {
 	(void) npages;
 
@@ -30,9 +18,17 @@ void free_kpages(vaddr_t addr) {
 	panic("Can't free_kpages yet!\n");
 }
 
-void vm_tlbshootdown(const struct tlbshootdown *ts) {
-	(void)ts;
+int alloc_upage(struct addrspace *as, vaddr_t vaddr) {
+	(void) as;
+	(void) vaddr;
 
-	panic("Can't vm_tlbshootdown yet!\n");
+	panic("Can't alloc_upage yet!\n");
 	return 0;
+}
+
+void free_upage(struct addrspace *as, vaddr_t vaddr) {
+	(void) as;
+	(void) vaddr;
+
+	panic("Can't free_upage yet!\n");
 }
