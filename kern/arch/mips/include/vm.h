@@ -111,10 +111,11 @@ struct metadata {
 	unsigned int busy : 1;			// busy
 };
 
-struct core_map_entry {		// maybe redundant alignment bits should be removed and a bitfield used to save space
+struct core_map_entry {
 	vaddr_t va;
 	struct addrspace *as;
-	struct metadata md;
+	uint32_t reserved;		// reserved for future use to make nicely aligned 16 byte entries
+	struct metadata md;		// 4 bytes
 };
 
 /*

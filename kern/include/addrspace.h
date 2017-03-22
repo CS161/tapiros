@@ -36,6 +36,7 @@
 
 
 #include <vm.h>
+#include <spinlock.h>
 #include "opt-dumbvm.h"
 
 struct vnode;
