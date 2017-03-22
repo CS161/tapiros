@@ -124,12 +124,18 @@ int sys_open(char* pathname, int flags, int *retval) {
 	}
 
 	spinlock_init(&vf->vf_lock);
+
+	vf->io_lock = lock_create(vf->vf_name);
+	if(vf->io_lock == NULL) {
+		goto err4;
+	}
+
 	vf->vf_flags = flags;
 	vf->vf_offset = 0;
 	vf->vf_refcount = 1;
 
 	if(add_vfile(vf, fd) != 0)	{		// add the appropriate entries to the per-process
-		goto err4;						// and global file descriptor tables
+		goto err5;						// and global file descriptor tables
 	}
 
 	if(retval != NULL)		// allow kernel to ignore return value for convenience
@@ -141,6 +147,8 @@ int sys_open(char* pathname, int flags, int *retval) {
 
 	// error cleanup
 
+	err5:
+		lock_destroy(vf->io_lock);
 	err4:
 		vfs_close(vf->vf_vnode);
 		spinlock_cleanup(&vf->vf_lock);
@@ -170,7 +178,10 @@ int sys_read(int fd, userptr_t buf, size_t buflen, int *retval) {
 	spinlock_release(&VFILES(CUR_FDS(fd))->vf_lock);
 
 
+	lock_acquire(VFILES(CUR_FDS(fd))->io_lock);
 	int err = VOP_READ(VFILES(CUR_FDS(fd))->vf_vnode, &uio);
+	lock_release(VFILES(CUR_FDS(fd))->io_lock);
+
 	if(err != 0)
 		return err;
 
@@ -208,7 +219,11 @@ int sys_write(int fd, const userptr_t buf, size_t buflen, int *retval) {
 
 	spinlock_release(&VFILES(CUR_FDS(fd))->vf_lock);
 
+
+	lock_acquire(VFILES(CUR_FDS(fd))->io_lock);
 	int err = VOP_WRITE(VFILES(CUR_FDS(fd))->vf_vnode, &uio);
+	lock_release(VFILES(CUR_FDS(fd))->io_lock);
+
 	if(err != 0)
 		return err;
 
@@ -310,6 +325,7 @@ int sys_close(int fd) {
 		kfree(vf->vf_name);
 		vfs_close(vf->vf_vnode);
 		spinlock_cleanup(&vf->vf_lock);
+		lock_destroy(vf->io_lock);
 		kfree(vf);
 
 		spinlock_acquire(&gf_lock);

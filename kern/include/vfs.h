@@ -54,6 +54,7 @@ struct vfile {
 	off_t vf_offset;			// file offset, will be used to set up uios
 	int vf_refcount;			// keeps track of multiple references in dup2, forked procs
 	struct spinlock vf_lock;	// protects refcount and offset access
+	struct lock *io_lock;		// protects read/write on a single vnode
 };
 
 /*
