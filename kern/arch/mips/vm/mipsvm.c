@@ -8,7 +8,16 @@
 
 
 void vm_bootstrap(void) {
-	panic("Can't vm_boostrap yet! (which means this message will never actually be printed, but whatever)\n");
+	size_t ramsize = ram_getsize();
+
+	// core map length should round up to nearest page
+	unsigned long npages = ((ramsize / PAGE_SIZE) * sizeof(struct core_map_entry) - 1) / PAGE_SIZE + 1;
+	core_map = (struct core_map_entry *) ram_stealmem(npages);
+
+	memset(core_map, 0, npages * PAGE_SIZE); // it would be pretty bad if the core map had garbage in it
+	for(unsigned long i = 0; i < npages; i++) {
+		core_map[i].md.kernel = 1;
+	}
 }
 
 int vm_fault(int faulttype, vaddr_t faultaddress) {

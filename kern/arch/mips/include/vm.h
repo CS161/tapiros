@@ -100,23 +100,6 @@ struct page_table_directory {
 	struct page_table* pts[1024];
 };
 
-struct metadata {
-	unsigned int swap : 20, : 5;	// address in swap
-	unsigned int recent : 1;		// recently evicted from TLB
-	unsigned int tlb : 1;			// currently in TLB
-	unsigned int dirty : 1;			// dirty page
-	unsigned int contig : 1;		// end of kernel allocation
-	unsigned int kernel : 1;		// belongs to kernel
-	unsigned int s_pres : 1;		// present in swap
-	unsigned int busy : 1;			// busy
-};
-
-struct core_map_entry {
-	vaddr_t va;
-	struct addrspace *as;
-	uint32_t reserved;		// reserved for future use to make nicely aligned 16 byte entries
-	struct metadata md;		// 4 bytes
-};
 
 /*
  * Interface to the low-level module that looks after the amount of
