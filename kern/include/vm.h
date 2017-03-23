@@ -38,6 +38,8 @@
 
 
 #include <machine/vm.h>
+#include <lib.h>
+#include <spinlock.h>
 
 /* Fault-type arguments to vm_fault() */
 #define VM_FAULT_READ        0    /* A read was attempted */
@@ -63,6 +65,8 @@ struct core_map_entry {
 };
 
 struct core_map_entry *core_map;
+unsigned long ncmes;
+struct spinlock core_map_splk;
 
 /* Initialization function */
 void vm_bootstrap(void);

@@ -31,12 +31,15 @@
 #define _MIPS_VM_H_
 
 
+#include <types.h>
+
 /*
  * Machine-dependent VM system definitions.
  */
 
-#define PAGE_SIZE  4096         /* size of VM page */
-#define PAGE_FRAME 0xfffff000   /* mask for getting page number from addr */
+#define PAGE_SIZE  			4096         /* size of VM page */
+#define PAGE_SIZE_POWER		12			 /* what power of 2 PAGE_SIZE is */
+#define PAGE_FRAME 			0xfffff000   /* mask for getting page number from addr */
 
 /*
  * MIPS-I hardwired memory layout:
@@ -65,7 +68,8 @@
  * exception handler code) when converted to a vaddr it's *not* NULL, *is*
  * a valid address, and will make a *huge* mess if you scribble on it.
  */
-#define PADDR_TO_KVADDR(paddr) ((paddr)+MIPS_KSEG0)
+#define PADDR_TO_KVADDR(paddr) ((paddr) + MIPS_KSEG0)
+#define PAGE_TO_PADDR(page) (page << PAGE_SIZE_POWER) + core_map
 
 /*
  * The top of user space. (Actually, the address immediately above the
