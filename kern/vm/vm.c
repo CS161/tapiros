@@ -2,6 +2,8 @@
  * Machine independent VM functions.
  */
 
+#include <types.h>
+#include <lib.h>
 #include <vm.h>
 
 
@@ -9,7 +11,7 @@ vaddr_t alloc_kpages(unsigned npages) {
 	(void) npages;
 
 	panic("Can't alloc_kpages yet!\n");
-	return NULL;
+	return 0;
 }
 
 void free_kpages(vaddr_t addr) {
