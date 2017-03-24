@@ -13,9 +13,8 @@ void vm_bootstrap(void) {
 	unsigned long npages = ((ncmes * sizeof(struct core_map_entry) - 1) / PAGE_SIZE) + 1;
 	core_map = (struct core_map_entry *) PADDR_TO_KVADDR(ram_stealmem(npages));
 
-	memset(core_map, 0, npages * PAGE_SIZE);
 	for(i = 0; i < npages; i++) {
-		core_map[i].va = (vaddr_t) (core_map + i);
+		core_map[i].va = ((vaddr_t) core_map) + i * PAGE_SIZE;
 		core_map[i].md.kernel = 1;
 	}
 	spinlock_init(&core_map_splk);
