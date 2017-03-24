@@ -29,9 +29,22 @@ vaddr_t alloc_kpages(unsigned npages) {
 }
 
 void free_kpages(vaddr_t addr) {
-	(void)addr;
 
-	panic("Can't free_kpages yet!\n");
+	// DOES NOT YET FREE CONTIGUOUS KALLOCATIONS
+
+	spinlock_acquire(&core_map_splk);
+
+	KASSERT(addr % PAGE_SIZE == 0);
+
+	unsigned long i = KVADDR_TO_PADDR(addr) / PAGE_SIZE;	// index in core_map
+	
+	KASSERT(core_map[i].va != 0);
+	KASSERT(core_map[i].md.kernel == 1);
+
+	core_map[i].va = 0;
+	core_map[i].md.kernel = 0;
+
+	spinlock_release(&core_map_splk);
 }
 
 int alloc_upage(struct addrspace *as, vaddr_t vaddr) {
