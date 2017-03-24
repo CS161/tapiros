@@ -6,8 +6,9 @@
 
 
 vaddr_t alloc_kpages(unsigned npages) {
-	if(npages > 1)
-		panic("Can't alloc more than one kpage yet!\n");
+
+	(void) npages;
+	// Currently allocates one page, no matter the request
 
 	spinlock_acquire(&core_map_splk);
 	vaddr_t ret = 0;
@@ -20,7 +21,10 @@ vaddr_t alloc_kpages(unsigned npages) {
 		}
 	}
 	spinlock_release(&core_map_splk);
-	
+
+	if(ret == 0)
+		panic("Out of memory! :( \n");
+
 	return ret;
 }
 
