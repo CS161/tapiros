@@ -34,9 +34,7 @@ void free_kpages(vaddr_t addr) {
 
 	spinlock_acquire(&core_map_splk);
 
-	KASSERT(addr % PAGE_SIZE == 0);
-
-	unsigned long i = KVADDR_TO_PADDR(addr) / PAGE_SIZE;	// index in core_map
+	unsigned long i = (addr - (vaddr_t)core_map) / PAGE_SIZE;	// index in core_map
 	
 	KASSERT(core_map[i].va != 0);
 	KASSERT(core_map[i].md.kernel == 1);
