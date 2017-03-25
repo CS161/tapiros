@@ -198,6 +198,10 @@ syscall(struct trapframe *tf)
 			err = 0; // so compiler doesn't give me warning
 			break;
 
+		case SYS_sbrk:
+			err = sys_sbrk((intptr_t) tf->tf_a0, &retval);
+			break;
+
 	    // Recognized but unimplemented syscalls so tests don't abort
 
 		case SYS_remove:

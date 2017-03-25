@@ -69,7 +69,7 @@ vaddr_t alloc_kpages(unsigned npages) {
 						candidates[1]++;
 					}
 					else {	// page is in TLB
-						TERMINATE_CHAIN(2);
+						TERMINATE_CHAIN(1);
 					}
 					candidates[2]++;
 				}
@@ -88,7 +88,7 @@ vaddr_t alloc_kpages(unsigned npages) {
 	TERMINATE_CHAIN(1);
 	TERMINATE_CHAIN(2);
 
-	for(i = 0; i < 2; i++) {
+	for(i = 0; i < 3; i++) {
 		if(lengths[i] >= npages) {
 			break;
 		}
@@ -107,6 +107,9 @@ vaddr_t alloc_kpages(unsigned npages) {
 	core_map[j-1].md.contig = 1;
 
 	spinlock_release(&core_map_splk);
+
+	if(ret < (vaddr_t) core_map)
+		panic("ret: %zu\n",(size_t)ret);
 
 	return ret;
 }

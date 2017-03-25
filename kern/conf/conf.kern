@@ -384,6 +384,7 @@ file      syscall/runprogram.c
 file      syscall/time_syscalls.c
 file      syscall/io_syscalls.c
 file      syscall/proc_syscalls.c
+file      syscall/vm_syscalls.c
 
 #
 # Startup and initialization

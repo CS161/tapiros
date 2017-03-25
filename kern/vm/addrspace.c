@@ -33,6 +33,7 @@
 #include <addrspace.h>
 #include <vm.h>
 #include <proc.h>
+#include <wchan.h>
 
 /*
  * Note! If OPT_DUMBVM is set, as is the case until you start the VM
@@ -47,14 +48,29 @@ as_create(void)
 
 	as = kmalloc(sizeof(struct addrspace));
 	if (as == NULL) {
-		return NULL;
+		goto err1;
 	}
 
-	/*
-	 * Initialize as needed.
-	 */
+	as->ptd = kmalloc(sizeof(struct page_table_directory));
+	if(as->ptd == NULL) {
+		goto err2;
+	}
+
+	as->addr_wchan = wchan_create("addrspace wchan");
+	if(as->addr_wchan == NULL) {
+		goto err3;
+	}
+
+	spinlock_init(&as->addr_splk);
 
 	return as;
+
+	err3:
+		kfree(as->ptd);
+	err2:
+		kfree(as);
+	err1:
+		return NULL;
 }
 
 int
