@@ -32,6 +32,7 @@
 
 
 #include <types.h>
+#include <mips/tlb.h>
 
 /*
  * Machine-dependent VM system definitions.

@@ -102,6 +102,7 @@ vaddr_t alloc_kpages(unsigned npages) {
 
 	for(j = starts[i]; j < starts[i] + lengths[i]; j++) {
 		core_map[j].va = ((vaddr_t) core_map) + j * PAGE_SIZE;
+		memset((void *) core_map[j].va, 0, PAGE_SIZE);
 		core_map[j].md.kernel = 1;
 	}
 	core_map[j-1].md.contig = 1;

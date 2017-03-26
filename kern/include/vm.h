@@ -82,8 +82,11 @@ void free_kpages(vaddr_t addr);
 int alloc_upage(struct addrspace *as, vaddr_t vaddr);
 void free_upage(struct addrspace *as, vaddr_t vaddr);
 
+// free all pages referenced by the page table hierarchy starting at 'ptd'
+void pth_free(struct addrspace *as, struct page_table_directory *ptd);
+
 /* TLB shootdown handling called from interprocessor_interrupt */
-void vm_tlbshootdown(const struct tlbshootdown *);
+void vm_tlbshootdown(const struct tlbshootdown *ts);
 
 
 #endif /* _VM_H_ */
