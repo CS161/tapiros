@@ -26,18 +26,56 @@ static union page_table_entry* get_pte(struct page_table_directory *ptd, vaddr_t
 
 // ***Assumes that no spinlocks are held
 // 'perms' is used to flag executable, read, and write permissions as follows: 00000xrw
-// If no flags are set, appropriate default values for stack/heap are used.
+// If no flags are set, appropriate default values for stack/heap are used 
+// (but vaddr must be a valid stack/heap address).
 // Returns 0 upon success.
 int alloc_upage(struct addrspace *as, vaddr_t vaddr, uint8_t perms) {
 	KASSERT(vaddr < USERSPACETOP);
+
+	union page_table_entry new_pte;
+	new_pte.all = 0;
+
+	// sys161 doesn't support executable perms, but might as well support them
+	if(perms != 0) {
+		if(perms & 1)
+			new_pte.w = 1;
+		if(perms & 2)
+			new_pte.r = 1;
+		if(perms & 4)
+			new_pte.x = 1;
+	}
+	else {
+		if((vaddr > as->heap_bottom && vaddr < as->heap_top) || (vaddr > USERSTACKBOTTOM && vaddr < USERSTACK)) {
+			new_pte.w = 1;
+			new_pte.r = 1;
+		}
+		else
+			return EINVAL;
+	}
 
 	spinlock_acquire(&as->addr_splk);
 
 	union page_table_entry *pte = get_pte(as->ptd, vaddr);
 	KASSERT(pte->addr == 0);
 
-	(void) vaddr;
-	(void) perms;
+	spinlock_acquire(&core_map_splk);
+
+	unsigned long i;
+	for(i = 0; i < ncmes; i++) {
+		if(!core_map[i].md.busy && core_map[i].va == 0) {
+			core_map[i].va = vaddr;
+			core_map[i].as = as;
+			new_pte.p = 1;
+			new_pte.addr = CMI_TO_PADDR(i);
+			*pte = new_pte;
+			break;
+		}
+	}
+	if(i == ncmes) {
+		// ***handle swap out then allocation
+	}
+
+	spinlock_release(&core_map_splk);
 
 	spinlock_release(&as->addr_splk);
 	return 0;
@@ -53,7 +91,7 @@ void free_upage(struct addrspace *as, vaddr_t vaddr) {
 	union page_table_entry *pte = get_pte(as->ptd, vaddr);
 	KASSERT(pte->addr != 0);
 
-	unsigned long i = PTE_TO_PADDR(pte) / PAGE_SIZE;
+	unsigned long i = PTE_TO_CMI(pte);
 
 	spinlock_acquire(&core_map_splk);
 
@@ -72,7 +110,7 @@ void free_upage(struct addrspace *as, vaddr_t vaddr) {
 	KASSERT(pte->b == 0);
 	// pte->b should be 1 a subset of the time core_map[i].md.busy is 1
 
-	// will need to handle tlb shootdowns and swap
+	// ***will need to handle tlb shootdowns and pages in swap
 	core_map[i].va = 0;
 	core_map[i].as = NULL;
 	core_map[i].md.all = 0;
@@ -120,9 +158,11 @@ int perms_fault(struct addrspace *as, vaddr_t faultaddress) {
 		return EFAULT;
 	}
 
-	unsigned long i = PTE_TO_PADDR(pte) / PAGE_SIZE;
+	unsigned long i = PTE_TO_CMI(pte);
 
 	spinlock_acquire(&core_map_splk);
+
+	// *** need to think about the possibility of swap happening after this fault starts
 
 	while(core_map[i].md.busy) {	// wait until the physical page isn't busy
 		spinlock_release(&core_map_splk);

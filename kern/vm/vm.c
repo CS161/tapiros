@@ -129,6 +129,7 @@ vaddr_t alloc_kpages(unsigned npages) {
 	vaddr_t ret = ((vaddr_t) core_map) + (starts[i] * PAGE_SIZE);
 	unsigned long j;
 
+	// ***need to add handling tlb shootdown and swapping
 	for(j = starts[i]; j < starts[i] + lengths[i]; j++) {
 		core_map[j].va = ((vaddr_t) core_map) + j * PAGE_SIZE;
 		core_map[j].md.kernel = 1;
@@ -137,8 +138,7 @@ vaddr_t alloc_kpages(unsigned npages) {
 
 	spinlock_release(&core_map_splk);
 
-	if(ret < (vaddr_t) core_map)
-		panic("ret: %zu\n",(size_t)ret);
+	KASSERT(ret > (vaddr_t)core_map);
 
 	return ret;
 }
