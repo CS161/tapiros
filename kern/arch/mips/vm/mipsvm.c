@@ -17,8 +17,10 @@
 static struct page_table_entry* get_pte(struct page_table_directory *ptd, vaddr_t addr) {
 	
 	vaddr_t l1 = addr >> 22;
-	if(ptd->pts[l1] == 0)
+	if(ptd->pts[l1] == 0) {
 		ptd->pts[l1] = kmalloc(sizeof(struct page_table));
+		memset(ptd->pts[l1], 0, sizeof(struct page_table));
+	}
 
 	vaddr_t l2 = (addr << 10) >> 22;
 
@@ -78,8 +80,17 @@ static int perms_fault(struct addrspace *as, vaddr_t faultaddress) {
 
 	core_map[i].md.dirty = 1;
 
-	// update TLB entry with writeable bit here
-	// to be implemented
+	// spinlock turns off interrupts, so TLB won't get messed up
+
+	uint32_t entryhi, entrylo;
+
+	entryhi = faultaddress & TLBHI_VPAGE;
+
+	uint32_t j = tlb_probe(entryhi, 0);
+	tlb_read(&entryhi, &entrylo, j);
+
+	entrylo |= TLBLO_DIRTY;
+	tlb_write(entryhi, entrylo, j);
 
 	spinlock_release(&core_map_splk);
 	spinlock_release(&as->addr_splk);

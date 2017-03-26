@@ -153,14 +153,17 @@ as_define_region(struct addrspace *as, vaddr_t vaddr, size_t memsize,
 	if(executable)
 		perms |= 4;
 
-	for(vaddr_t i = vaddr; i < vaddr + memsize; i += PAGE_SIZE) {
+	vaddr_t i;
+	for(i = vaddr; i < vaddr + memsize; i += PAGE_SIZE) {
 		alloc_upage(as, i, perms);
 	}
 
 	as->heap_bottom = i;
 	as->heap_top = i;
+	if(as->heap_top > USERHEAPTOP)
+		return EINVAL;
 
-	return ENOSYS;
+	return 0;
 }
 
 int
