@@ -126,9 +126,7 @@ void
 as_deactivate(void)
 {
 	/*
-	 * Write this. For many designs it won't need to actually do
-	 * anything. See proc.c for an explanation of why it (might)
-	 * be needed.
+	 * Do nothing.
 	 */
 }
 
@@ -146,16 +144,19 @@ int
 as_define_region(struct addrspace *as, vaddr_t vaddr, size_t memsize,
 		 int readable, int writeable, int executable)
 {
-	/*
-	 * Write this.
-	 */
+	vaddr &= PAGE_FRAME;
+	uint8_t perms = 0;
+	if(writeable)
+		perms |= 1;
+	if(readable)
+		perms |= 2;
+	if(executable)
+		perms |= 4;
 
-	(void)as;
-	(void)vaddr;
-	(void)memsize;
-	(void)readable;
-	(void)writeable;
-	(void)executable;
+	for(vaddr_t i = vaddr; i < vaddr + memsize; i += PAGE_SIZE) {
+		alloc_upage(as, i, perms);
+	}
+
 	return ENOSYS;
 }
 

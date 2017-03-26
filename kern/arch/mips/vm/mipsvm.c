@@ -13,15 +13,6 @@
 #include <wchan.h>
 
 
-void pth_free(struct addrspace *as, struct page_table_directory *ptd) {
-
-	// doesn't traverse the whole page table yet
-
-	(void) as;
-
-	kfree(ptd);
-}
-
 // assumes that you hold the spinlock of the addrspace 'ptd' belongs to
 static struct page_table_entry* get_pte(struct page_table_directory *ptd, vaddr_t addr) {
 	
@@ -33,6 +24,36 @@ static struct page_table_entry* get_pte(struct page_table_directory *ptd, vaddr_
 
 	return (struct page_table_entry *) (ptd->pts[l1] + l2);
 }
+
+// 'perms' is used to flag executable, read, and write permissions as follows: 00000xrw
+// If no flags are set, appropriate default values for stack/heap are used.
+int alloc_upage(struct addrspace *as, vaddr_t vaddr, uint8_t perms) {
+	(void) as;
+	(void) vaddr;
+	(void) perms;
+
+	panic("Can't alloc_upage yet!\n");
+	return 0;
+}
+
+
+void free_upage(struct addrspace *as, vaddr_t vaddr) {
+	(void) as;
+	(void) vaddr;
+
+	panic("Can't free_upage yet!\n");
+}
+
+
+void pth_free(struct addrspace *as, struct page_table_directory *ptd) {
+
+	// doesn't traverse the whole page table yet
+
+	(void) as;
+
+	kfree(ptd);
+}
+
 
 static int perms_fault(struct addrspace *as, vaddr_t faultaddress) {
 	spinlock_acquire(&as->addr_splk);
@@ -66,6 +87,7 @@ static int perms_fault(struct addrspace *as, vaddr_t faultaddress) {
 	return 0;
 }
 
+
 static int tlb_miss(struct addrspace *as, vaddr_t faultaddress) {
 	spinlock_acquire(&as->addr_splk);
 
@@ -76,6 +98,7 @@ static int tlb_miss(struct addrspace *as, vaddr_t faultaddress) {
 
 	return 0;
 }
+
 
 int vm_fault(int faulttype, vaddr_t faultaddress) {
 
@@ -105,6 +128,7 @@ int vm_fault(int faulttype, vaddr_t faultaddress) {
 			return EINVAL;
 	}
 }
+
 
 void vm_tlbshootdown(const struct tlbshootdown *ts) {
 	(void)ts;

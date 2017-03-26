@@ -138,20 +138,3 @@ void free_kpages(vaddr_t addr) {
 
 	spinlock_release(&core_map_splk);
 }
-
-
-int alloc_upage(struct addrspace *as, vaddr_t vaddr) {
-	(void) as;
-	(void) vaddr;
-
-	panic("Can't alloc_upage yet!\n");
-	return 0;
-}
-
-
-void free_upage(struct addrspace *as, vaddr_t vaddr) {
-	(void) as;
-	(void) vaddr;
-
-	panic("Can't free_upage yet!\n");
-}

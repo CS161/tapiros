@@ -79,7 +79,7 @@ vaddr_t alloc_kpages(unsigned npages);
 void free_kpages(vaddr_t addr);
 
 /* Allocate/free user pages */
-int alloc_upage(struct addrspace *as, vaddr_t vaddr);
+int alloc_upage(struct addrspace *as, vaddr_t vaddr, uint8_t perms); // 'perms' has the form 00000xrw
 void free_upage(struct addrspace *as, vaddr_t vaddr);
 
 // free all pages referenced by the page table hierarchy starting at 'ptd'
