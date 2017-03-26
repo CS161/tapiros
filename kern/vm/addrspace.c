@@ -157,6 +157,9 @@ as_define_region(struct addrspace *as, vaddr_t vaddr, size_t memsize,
 		alloc_upage(as, i, perms);
 	}
 
+	as->heap_bottom = i;
+	as->heap_top = i;
+
 	return ENOSYS;
 }
 
@@ -164,7 +167,7 @@ int
 as_prepare_load(struct addrspace *as)
 {
 	/*
-	 * Write this.
+	 * Do nothing.
 	 */
 
 	(void)as;
@@ -175,7 +178,7 @@ int
 as_complete_load(struct addrspace *as)
 {
 	/*
-	 * Write this.
+	 * Do nothing.
 	 */
 
 	(void)as;
@@ -186,6 +189,8 @@ int
 as_define_stack(struct addrspace *as, vaddr_t *stackptr)
 {
 	(void)as;
+
+	// stack pages are allocated on demand
 
 	/* Initial user-level stack pointer */
 	*stackptr = USERSTACK;
