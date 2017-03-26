@@ -11,7 +11,7 @@
 
 
 // ***Assumes that you hold the spinlock of the addrspace 'ptd' belongs to
-static struct page_table_entry* get_pte(struct page_table_directory *ptd, vaddr_t vaddr) {
+static union page_table_entry* get_pte(struct page_table_directory *ptd, vaddr_t vaddr) {
 	
 	vaddr_t l1 = vaddr >> 22;
 	if(ptd->pts[l1] == 0) {
@@ -21,7 +21,7 @@ static struct page_table_entry* get_pte(struct page_table_directory *ptd, vaddr_
 
 	vaddr_t l2 = (vaddr << 10) >> 22;
 
-	return (struct page_table_entry *) (ptd->pts[l1] + l2);
+	return (union page_table_entry *) (ptd->pts[l1] + l2);
 }
 
 // ***Assumes that no spinlocks are held
@@ -33,7 +33,7 @@ int alloc_upage(struct addrspace *as, vaddr_t vaddr, uint8_t perms) {
 
 	spinlock_acquire(&as->addr_splk);
 
-	struct page_table_entry *pte = get_pte(as->ptd, vaddr);
+	union page_table_entry *pte = get_pte(as->ptd, vaddr);
 	KASSERT(pte->addr == 0);
 
 	(void) vaddr;
@@ -50,7 +50,7 @@ void free_upage(struct addrspace *as, vaddr_t vaddr) {
 
 	spinlock_acquire(&as->addr_splk);
 	
-	struct page_table_entry *pte = get_pte(as->ptd, vaddr);
+	union page_table_entry *pte = get_pte(as->ptd, vaddr);
 	KASSERT(pte->addr != 0);
 
 	unsigned long i = PTE_TO_PADDR(pte) / PAGE_SIZE;
@@ -66,6 +66,7 @@ void free_upage(struct addrspace *as, vaddr_t vaddr) {
 	}
 
 	KASSERT(core_map[i].va != 0);
+	KASSERT(core_map[i].as == as);
 	KASSERT(core_map[i].md.kernel == 0);
 	KASSERT(core_map[i].md.busy == 0);
 	KASSERT(pte->b == 0);
@@ -73,18 +74,10 @@ void free_upage(struct addrspace *as, vaddr_t vaddr) {
 
 	// will need to handle tlb shootdowns and swap
 	core_map[i].va = 0;
-	core_map[i].md.swap = 0;
-	core_map[i].md.recent = 0;
-	core_map[i].md.tlb = 0;
-	core_map[i].md.dirty = 0;
-	core_map[i].md.contig = 0;
-	core_map[i].md.s_pres = 0;
+	core_map[i].as = NULL;
+	core_map[i].md.all = 0;
 
-	pte->addr = 0;
-	pte->x = 0;
-	pte->r = 0;
-	pte->w = 0;
-	pte->p = 0;
+	pte->all = 0;
 
 	spinlock_release(&core_map_splk);
 
@@ -120,7 +113,7 @@ void pth_free(struct addrspace *as, struct page_table_directory *ptd) {
 int perms_fault(struct addrspace *as, vaddr_t faultaddress) {
 	spinlock_acquire(&as->addr_splk);
 
-	struct page_table_entry *pte = get_pte(as->ptd, faultaddress);
+	union page_table_entry *pte = get_pte(as->ptd, faultaddress);
 
 	if(!pte->w) {	// check if the page actually doesn't permit writes
 		spinlock_release(&as->addr_splk);
@@ -163,7 +156,7 @@ int perms_fault(struct addrspace *as, vaddr_t faultaddress) {
 int tlb_miss(struct addrspace *as, vaddr_t faultaddress) {
 	spinlock_acquire(&as->addr_splk);
 
-	struct page_table_entry *pte = get_pte(as->ptd, faultaddress);
+	union page_table_entry *pte = get_pte(as->ptd, faultaddress);
 
 	if(pte->addr == 0) {
 

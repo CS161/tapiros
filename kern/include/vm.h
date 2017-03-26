@@ -49,22 +49,25 @@
 #define VM_FAULT_WRITE       1    /* A write was attempted */
 #define VM_FAULT_READONLY    2    /* A write to a readonly page was attempted*/
 
-struct metadata {
-	unsigned int swap : 20, : 5;	// address in swap
-	unsigned int recent : 1;		// recently evicted from TLB
-	unsigned int tlb : 1;			// currently in TLB
-	unsigned int dirty : 1;			// dirty page
-	unsigned int contig : 1;		// end of kernel allocation
-	unsigned int kernel : 1;		// belongs to kernel
-	unsigned int s_pres : 1;		// present in swap
-	unsigned int busy : 1;			// busy
+union metadata {
+	struct {
+		unsigned int swap : 20, : 5;	// address in swap
+		unsigned int recent : 1;		// recently evicted from TLB
+		unsigned int tlb : 1;			// currently in TLB
+		unsigned int dirty : 1;			// dirty page
+		unsigned int contig : 1;		// end of kernel allocation
+		unsigned int kernel : 1;		// belongs to kernel
+		unsigned int s_pres : 1;		// present in swap
+		unsigned int busy : 1;			// busy
+	};
+	uint32_t all;	// for zeroing metadata in one instruction
 };
 
 struct core_map_entry {
 	vaddr_t va;
 	struct addrspace *as;
 	uint32_t reserved;		// reserved for future use to make nicely aligned 16 byte entries
-	struct metadata md;		// 4 bytes
+	union metadata md;		// 4 bytes
 };
 
 struct core_map_entry *core_map;

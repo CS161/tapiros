@@ -89,17 +89,20 @@
 #define USERSTACKBOTTOM	USERSPACETOP - (1024 * PAGE_SIZE)
 #define USERHEAPTOP 	USERSTACKBOTTOM
 
-struct page_table_entry {
-	unsigned int addr : 20, : 7;	// address in memory or swap
-	unsigned int x : 1;				// executable
-	unsigned int r : 1;				// readable
-	unsigned int w : 1;				// writeable
-	unsigned int p : 1;				// present
-	unsigned int b : 1;				// busy
+union page_table_entry {
+	struct {
+		unsigned int addr : 20, : 7;	// address in memory or swap
+		unsigned int x : 1;				// executable
+		unsigned int r : 1;				// readable
+		unsigned int w : 1;				// writeable
+		unsigned int p : 1;				// present
+		unsigned int b : 1;				// busy
+	};
+	uint32_t all;	// for zeroing the PTE in one instruction
 };
 
 struct page_table {
-	uint32_t ptes[1024];
+	union page_table_entry ptes[1024];
 };
 
 struct page_table_directory {
