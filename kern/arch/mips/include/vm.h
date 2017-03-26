@@ -85,7 +85,9 @@
  * We put the stack at the very top of user virtual memory because it
  * grows downwards.
  */
-#define USERSTACK     USERSPACETOP
+#define USERSTACK     	USERSPACETOP
+#define USERSTACKBOTTOM	USERSPACETOP - (1024 * PAGE_SIZE)
+#define USERHEAPTOP 	USERSTACKBOTTOM
 
 struct page_table_entry {
 	unsigned int addr : 20, : 7;	// address in memory or swap
