@@ -3,47 +3,107 @@
  */
 
 #include <vm.h>
-#include <current.h>
 #include <spl.h>
 #include <cpu.h>
-#include <kern/errno.h>
-#include <proc.h>
 #include <mips/tlb.h>
 #include <addrspace.h>
 #include <wchan.h>
 
 
-// assumes that you hold the spinlock of the addrspace 'ptd' belongs to
-static struct page_table_entry* get_pte(struct page_table_directory *ptd, vaddr_t addr) {
+// ***Assumes that you hold the spinlock of the addrspace 'ptd' belongs to
+static struct page_table_entry* get_pte(struct page_table_directory *ptd, vaddr_t vaddr) {
 	
-	vaddr_t l1 = addr >> 22;
+	vaddr_t l1 = vaddr >> 22;
 	if(ptd->pts[l1] == 0) {
 		ptd->pts[l1] = kmalloc(sizeof(struct page_table));
 		memset(ptd->pts[l1], 0, sizeof(struct page_table));
 	}
 
-	vaddr_t l2 = (addr << 10) >> 22;
+	vaddr_t l2 = (vaddr << 10) >> 22;
 
 	return (struct page_table_entry *) (ptd->pts[l1] + l2);
 }
 
+// ***Assumes that no spinlocks are held
 // 'perms' is used to flag executable, read, and write permissions as follows: 00000xrw
 // If no flags are set, appropriate default values for stack/heap are used.
+// Returns 0 upon success.
 int alloc_upage(struct addrspace *as, vaddr_t vaddr, uint8_t perms) {
-	(void) as;
+	KASSERT(vaddr < USERSPACETOP);
+
+	spinlock_acquire(&as->addr_splk);
+
+	struct page_table_entry *pte = get_pte(as->ptd, vaddr);
+	KASSERT(pte->addr == 0);
+
 	(void) vaddr;
 	(void) perms;
 
-	panic("Can't alloc_upage yet!\n");
+	spinlock_release(&as->addr_splk);
 	return 0;
 }
 
 
+// ***Assumes that no spinlocks are held
 void free_upage(struct addrspace *as, vaddr_t vaddr) {
-	(void) as;
-	(void) vaddr;
+	KASSERT(vaddr < USERSPACETOP);
 
-	panic("Can't free_upage yet!\n");
+	spinlock_acquire(&as->addr_splk);
+	
+	struct page_table_entry *pte = get_pte(as->ptd, vaddr);
+	KASSERT(pte->addr != 0);
+
+	unsigned long i = PTE_TO_PADDR(pte) / PAGE_SIZE;
+
+	spinlock_acquire(&core_map_splk);
+
+	while(core_map[i].md.busy) {	// wait until the physical page isn't busy
+		spinlock_release(&core_map_splk);
+
+		wchan_sleep(as->addr_wchan, &as->addr_splk);
+
+		spinlock_acquire(&core_map_splk);
+	}
+
+	KASSERT(core_map[i].va != 0);
+	KASSERT(core_map[i].md.kernel == 0);
+	KASSERT(core_map[i].md.busy == 0);
+	KASSERT(pte->b == 0);
+	// pte->b should be 1 a subset of the time core_map[i].md.busy is 1
+
+	// will need to handle tlb shootdowns and swap
+	core_map[i].va = 0;
+	core_map[i].md.swap = 0;
+	core_map[i].md.recent = 0;
+	core_map[i].md.tlb = 0;
+	core_map[i].md.dirty = 0;
+	core_map[i].md.contig = 0;
+	core_map[i].md.s_pres = 0;
+
+	pte->addr = 0;
+	pte->x = 0;
+	pte->r = 0;
+	pte->w = 0;
+	pte->p = 0;
+
+	spinlock_release(&core_map_splk);
+
+	spinlock_release(&as->addr_splk);
+}
+
+
+// calls alloc_upage() multiple times with error handling
+int alloc_upages(struct addrspace *as, vaddr_t vaddr, unsigned npages, uint8_t perms) {
+	for(unsigned i = 0; i < npages; i++) {
+		int err = alloc_upage(as, vaddr + i * PAGE_SIZE, perms);
+		if(err != 0) {
+			for(unsigned j = 0; j < i; j++) {
+				free_upage(as, vaddr + i * PAGE_SIZE);
+			}
+			return err;
+		}
+	}
+	return 0;
 }
 
 
@@ -57,18 +117,19 @@ void pth_free(struct addrspace *as, struct page_table_directory *ptd) {
 }
 
 
-static int perms_fault(struct addrspace *as, vaddr_t faultaddress) {
+int perms_fault(struct addrspace *as, vaddr_t faultaddress) {
 	spinlock_acquire(&as->addr_splk);
 
 	struct page_table_entry *pte = get_pte(as->ptd, faultaddress);
+
 	if(!pte->w) {	// check if the page actually doesn't permit writes
 		spinlock_release(&as->addr_splk);
 		return EFAULT;
 	}
 
-	spinlock_acquire(&core_map_splk);
-
 	unsigned long i = PTE_TO_PADDR(pte) / PAGE_SIZE;
+
+	spinlock_acquire(&core_map_splk);
 
 	while(core_map[i].md.busy) {	// wait until the physical page isn't busy
 		spinlock_release(&core_map_splk);
@@ -99,45 +160,19 @@ static int perms_fault(struct addrspace *as, vaddr_t faultaddress) {
 }
 
 
-static int tlb_miss(struct addrspace *as, vaddr_t faultaddress) {
+int tlb_miss(struct addrspace *as, vaddr_t faultaddress) {
 	spinlock_acquire(&as->addr_splk);
 
 	struct page_table_entry *pte = get_pte(as->ptd, faultaddress);
+
+	if(pte->addr == 0) {
+
+	}
 	(void) pte;
 
 	spinlock_release(&as->addr_splk);
 
 	return 0;
-}
-
-
-int vm_fault(int faulttype, vaddr_t faultaddress) {
-
-	if(faultaddress >= USERSPACETOP) {
-		return EFAULT;
-	}
-
-	if(curproc == NULL) {
-		return EFAULT;
-	}
-
-	struct addrspace *as = proc_getas();
-
-	if(as == NULL) {
-		return EFAULT;
-	}
-
-	switch(faulttype) {
-		case VM_FAULT_READONLY:
-			return perms_fault(as, faultaddress);
-
-		case VM_FAULT_WRITE:
-		case VM_FAULT_READ:
-			return tlb_miss(as, faultaddress);
-
-		default:
-			return EINVAL;
-	}
 }
 
 

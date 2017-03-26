@@ -40,6 +40,9 @@
 #include <machine/vm.h>
 #include <lib.h>
 #include <spinlock.h>
+#include <proc.h>
+#include <current.h>
+#include <kern/errno.h>
 
 /* Fault-type arguments to vm_fault() */
 #define VM_FAULT_READ        0    /* A read was attempted */
@@ -73,6 +76,8 @@ void vm_bootstrap(void);
 
 /* Fault handling function called by trap code */
 int vm_fault(int faulttype, vaddr_t faultaddress);
+int perms_fault(struct addrspace *as, vaddr_t faultaddress);
+int tlb_miss(struct addrspace *as, vaddr_t faultaddress);
 
 /* Allocate/free kernel heap pages (called by kmalloc/kfree) */
 vaddr_t alloc_kpages(unsigned npages);
@@ -80,6 +85,7 @@ void free_kpages(vaddr_t addr);
 
 /* Allocate/free user pages */
 int alloc_upage(struct addrspace *as, vaddr_t vaddr, uint8_t perms); // 'perms' has the form 00000xrw
+int alloc_upages(struct addrspace *as, vaddr_t vaddr, unsigned npages, uint8_t perms);
 void free_upage(struct addrspace *as, vaddr_t vaddr);
 
 // free all pages referenced by the page table hierarchy starting at 'ptd'

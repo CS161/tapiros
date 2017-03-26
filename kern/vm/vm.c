@@ -21,6 +21,35 @@ void vm_bootstrap(void) {
 }
 
 
+int vm_fault(int faulttype, vaddr_t faultaddress) {
+	if(faultaddress >= USERSPACETOP) {
+		return EFAULT;
+	}
+
+	if(curproc == NULL) {
+		return EFAULT;
+	}
+
+	struct addrspace *as = proc_getas();
+
+	if(as == NULL) {
+		return EFAULT;
+	}
+
+	switch(faulttype) {
+		case VM_FAULT_READONLY:
+			return perms_fault(as, faultaddress);
+
+		case VM_FAULT_WRITE:
+		case VM_FAULT_READ:
+			return tlb_miss(as, faultaddress);
+
+		default:
+			return EINVAL;
+	}
+}
+
+
 // alloc_kpages is more readable with this, and macros don't incur overhead from function calls 
 // (though that might be compiled out)
 

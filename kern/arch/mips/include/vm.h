@@ -106,7 +106,6 @@ struct page_table_directory {
 	struct page_table* pts[1024];
 };
 
-
 /*
  * Interface to the low-level module that looks after the amount of
  * physical memory we have.

@@ -63,6 +63,9 @@ as_create(void)
 
 	spinlock_init(&as->addr_splk);
 
+	as->heap_bottom = 0;
+	as->heap_top = 0;
+
 	return as;
 
 	err3:
@@ -153,15 +156,17 @@ as_define_region(struct addrspace *as, vaddr_t vaddr, size_t memsize,
 	if(executable)
 		perms |= 4;
 
-	vaddr_t i;
-	for(i = vaddr; i < vaddr + memsize; i += PAGE_SIZE) {
-		alloc_upage(as, i, perms);
-	}
+	unsigned npages = (memsize + PAGE_SIZE - 1) / PAGE_SIZE; // round up memsize to next page
 
-	as->heap_bottom = i;
-	as->heap_top = i;
-	if(as->heap_top > USERHEAPTOP)
+	if(vaddr + npages * PAGE_SIZE > USERHEAPTOP)
 		return EINVAL;
+
+	int err = alloc_upages(as, vaddr, npages, perms);
+	if(err != 0)
+		return err;
+
+	as->heap_bottom = vaddr + npages * PAGE_SIZE;
+	as->heap_top = as->heap_bottom;
 
 	return 0;
 }
@@ -173,18 +178,16 @@ as_prepare_load(struct addrspace *as)
 	 * Do nothing.
 	 */
 
-	(void)as;
+	(void) as;
 	return 0;
 }
 
 int
 as_complete_load(struct addrspace *as)
 {
-	/*
-	 * Do nothing.
-	 */
+	if(as->heap_bottom == 0)	// if an executable has no code region
+		return EINVAL;
 
-	(void)as;
 	return 0;
 }
 
@@ -193,7 +196,8 @@ as_define_stack(struct addrspace *as, vaddr_t *stackptr)
 {
 	(void)as;
 
-	// stack pages are allocated on demand
+	// We use on-demand paging for the stack, so this function
+	// doesn't need to do much.
 
 	/* Initial user-level stack pointer */
 	*stackptr = USERSTACK;
