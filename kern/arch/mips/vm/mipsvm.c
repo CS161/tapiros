@@ -249,6 +249,11 @@ int tlb_miss(struct addrspace *as, vaddr_t faultaddress) {
 	return 0;
 }
 
+void invalidate_tlb(void) {
+	for(unsigned i = 0; i < NUM_TLB; i++)
+		tlb_write(TLBHI_INVALID(i), TLBLO_INVALID(), i);
+}
+
 
 void vm_tlbshootdown(const struct tlbshootdown *ts) {
 	(void)ts;

@@ -120,9 +120,7 @@ as_activate(void)
 		return;
 	}
 
-	/*
-	 * Write this.
-	 */
+	invalidate_tlb();
 }
 
 void

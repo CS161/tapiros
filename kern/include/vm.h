@@ -96,6 +96,7 @@ void pth_free(struct addrspace *as, struct page_table_directory *ptd);
 
 /* TLB shootdown handling called from interprocessor_interrupt */
 void vm_tlbshootdown(const struct tlbshootdown *ts);
+void invalidate_tlb(void);
 
 
 #endif /* _VM_H_ */
