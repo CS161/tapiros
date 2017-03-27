@@ -55,6 +55,7 @@ as_create(void)
 	if(as->ptd == NULL) {
 		goto err2;
 	}
+	memset(as->ptd, 0, sizeof(struct page_table_directory));
 
 	as->addr_wchan = wchan_create("addrspace wchan");
 	if(as->addr_wchan == NULL) {

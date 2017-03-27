@@ -78,6 +78,8 @@ int alloc_upage(struct addrspace *as, vaddr_t vaddr, uint8_t perms, bool as_splk
 		// ***handle swap out then allocation
 	}
 
+	KASSERT(pte->addr != 0);
+
 	spinlock_release(&core_map_splk);
 
 	if(!as_splk)

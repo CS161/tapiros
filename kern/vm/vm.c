@@ -22,6 +22,7 @@ void vm_bootstrap(void) {
 
 
 int vm_fault(int faulttype, vaddr_t faultaddress) {
+
 	if(faultaddress < PAGE_SIZE || faultaddress >= USERSPACETOP) {
 		return EFAULT;
 	}
@@ -61,6 +62,7 @@ int vm_fault(int faulttype, vaddr_t faultaddress) {
 	candidates[n] = 0;					\
 
 
+// ***Does not guarantee zero-filled pages
 vaddr_t alloc_kpages(unsigned npages) {
 
 	/*
