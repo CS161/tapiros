@@ -68,7 +68,8 @@ int alloc_upage(struct addrspace *as, vaddr_t vaddr, uint8_t perms, bool as_splk
 			core_map[i].as = as;
 			core_map[i].md.busy = 1;
 			new_pte.p = 1;
-			new_pte.addr = CMI_TO_PADDR(i);
+			new_pte.addr = CMI_TO_PADDR(i) >> 12;
+			memset((void *) PADDR_TO_KVADDR(CMI_TO_PADDR(i)), 0, PAGE_SIZE);
 			*pte = new_pte;
 			break;
 		}
@@ -231,15 +232,24 @@ int tlb_miss(struct addrspace *as, vaddr_t faultaddress) {
 	// write permissions aren't set so we can track the dirty bit
 
 	unsigned long i;
-	unsigned cmj;
-	do{
+	unsigned long cmj;
+	do {
+
 		i = random() % NUM_TLB;
 		tlb_read(&oldentryhi, &oldentrylo, i);
-		cmj = PADDR_TO_CMI(oldentrylo) & TLBLO_PPAGE;
+		if((oldentrylo & TLBLO_PPAGE) == 0) {
+			cmj = 0;
+			break;
+		}
+
+		cmj = PADDR_TO_CMI((oldentrylo & TLBLO_PPAGE) << 12);
+
 	} while (core_map[cmj].md.busy);	// it's a pain to replace TLB entries in the middle of swap,
 										// and because there are max 32 cpus, max 32 TLB entries can be busy
-	core_map[cmj].md.tlb = 0;
-	core_map[cmj].md.recent = 1;
+	if(cmj != 0) {
+		core_map[cmj].md.tlb = 0;
+		core_map[cmj].md.recent = 1;
+	}
 
 	tlb_write(newentryhi, newentrylo, i);
 

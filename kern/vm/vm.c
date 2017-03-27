@@ -22,7 +22,7 @@ void vm_bootstrap(void) {
 
 
 int vm_fault(int faulttype, vaddr_t faultaddress) {
-	if(faultaddress >= USERSPACETOP) {
+	if(faultaddress < PAGE_SIZE || faultaddress >= USERSPACETOP) {
 		return EFAULT;
 	}
 
