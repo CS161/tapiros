@@ -70,6 +70,7 @@
  */
 #define PADDR_TO_KVADDR(paddr) 	((paddr) + MIPS_KSEG0)
 #define PTE_TO_CMI(pte) 		(((pte->addr << 12) - ((vaddr_t)core_map - MIPS_KSEG0)) / PAGE_SIZE)
+#define PADDR_TO_CMI(paddr) 	((paddr - ((vaddr_t)core_map - MIPS_KSEG0)) / PAGE_SIZE)
 #define CMI_TO_PADDR(cmi)		(((vaddr_t)core_map + cmi * PAGE_SIZE) - MIPS_KSEG0)
 
 /*

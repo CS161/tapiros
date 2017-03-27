@@ -24,12 +24,12 @@ static union page_table_entry* get_pte(struct page_table_directory *ptd, vaddr_t
 	return (union page_table_entry *) (ptd->pts[l1] + l2);
 }
 
-// ***Assumes that no spinlocks are held
 // 'perms' is used to flag executable, read, and write permissions as follows: 00000xrw
+// 'as_splk' marks whether the address space spinlock is held when calling the function
 // If no flags are set, appropriate default values for stack/heap are used 
 // (but vaddr must be a valid stack/heap address).
 // Returns 0 upon success.
-int alloc_upage(struct addrspace *as, vaddr_t vaddr, uint8_t perms) {
+int alloc_upage(struct addrspace *as, vaddr_t vaddr, uint8_t perms, bool as_splk) {
 	KASSERT(vaddr < USERSPACETOP);
 
 	union page_table_entry new_pte;
@@ -53,7 +53,8 @@ int alloc_upage(struct addrspace *as, vaddr_t vaddr, uint8_t perms) {
 			return EINVAL;
 	}
 
-	spinlock_acquire(&as->addr_splk);
+	if(!as_splk)
+		spinlock_acquire(&as->addr_splk);
 
 	union page_table_entry *pte = get_pte(as->ptd, vaddr);
 	KASSERT(pte->addr == 0);
@@ -65,6 +66,7 @@ int alloc_upage(struct addrspace *as, vaddr_t vaddr, uint8_t perms) {
 		if(!core_map[i].md.busy && core_map[i].va == 0) {
 			core_map[i].va = vaddr;
 			core_map[i].as = as;
+			core_map[i].md.busy = 1;
 			new_pte.p = 1;
 			new_pte.addr = CMI_TO_PADDR(i);
 			*pte = new_pte;
@@ -77,7 +79,8 @@ int alloc_upage(struct addrspace *as, vaddr_t vaddr, uint8_t perms) {
 
 	spinlock_release(&core_map_splk);
 
-	spinlock_release(&as->addr_splk);
+	if(!as_splk)
+		spinlock_release(&as->addr_splk);
 	return 0;
 }
 
@@ -123,10 +126,11 @@ void free_upage(struct addrspace *as, vaddr_t vaddr) {
 }
 
 
+// ***Assumes no spinlocks are held
 // calls alloc_upage() multiple times with error handling
 int alloc_upages(struct addrspace *as, vaddr_t vaddr, unsigned npages, uint8_t perms) {
 	for(unsigned i = 0; i < npages; i++) {
-		int err = alloc_upage(as, vaddr + i * PAGE_SIZE, perms);
+		int err = alloc_upage(as, vaddr + i * PAGE_SIZE, perms, false);
 		if(err != 0) {
 			for(unsigned j = 0; j < i; j++) {
 				free_upage(as, vaddr + i * PAGE_SIZE);
@@ -199,10 +203,47 @@ int tlb_miss(struct addrspace *as, vaddr_t faultaddress) {
 	union page_table_entry *pte = get_pte(as->ptd, faultaddress);
 
 	if(pte->addr == 0) {
-
+		int err = alloc_upage(as, faultaddress, 0, true);
+		if(err != 0) {
+			spinlock_release(&as->addr_splk);
+			return err;
+		}
 	}
-	(void) pte;
+	
+	while(pte->b)
+		wchan_sleep(as->addr_wchan, &as->addr_splk);
 
+	if(!pte->p) {
+		// swap stuff goes here
+		panic("tlb_miss: !pte_p shouldn't be possible without swap\n");
+	}
+
+	spinlock_acquire(&core_map_splk);
+
+	unsigned long cmi = PTE_TO_CMI(pte);
+	core_map[cmi].md.tlb = 1;
+
+	uint32_t oldentryhi = 0, oldentrylo = 0;
+	uint32_t newentryhi = 0, newentrylo = 0;
+
+	newentryhi = faultaddress & TLBHI_VPAGE;
+	newentrylo = (pte->addr & TLBLO_PPAGE) | TLBLO_VALID;
+	// write permissions aren't set so we can track the dirty bit
+
+	unsigned long i;
+	unsigned cmj;
+	do{
+		i = random() % NUM_TLB;
+		tlb_read(&oldentryhi, &oldentrylo, i);
+		cmj = PADDR_TO_CMI(oldentrylo) & TLBLO_PPAGE;
+	} while (core_map[cmj].md.busy);	// it's a pain to replace TLB entries in the middle of swap,
+										// and because there are max 32 cpus, max 32 TLB entries can be busy
+	core_map[cmj].md.tlb = 0;
+	core_map[cmj].md.recent = 1;
+
+	tlb_write(newentryhi, newentrylo, i);
+
+	spinlock_release(&core_map_splk);
 	spinlock_release(&as->addr_splk);
 
 	return 0;

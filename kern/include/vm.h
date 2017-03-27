@@ -87,7 +87,7 @@ vaddr_t alloc_kpages(unsigned npages);
 void free_kpages(vaddr_t addr);
 
 /* Allocate/free user pages */
-int alloc_upage(struct addrspace *as, vaddr_t vaddr, uint8_t perms); // 'perms' has the form 00000xrw
+int alloc_upage(struct addrspace *as, vaddr_t vaddr, uint8_t perms, bool as_splk); // 'perms' has the form 00000xrw
 int alloc_upages(struct addrspace *as, vaddr_t vaddr, unsigned npages, uint8_t perms);
 void free_upage(struct addrspace *as, vaddr_t vaddr);
 
