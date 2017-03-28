@@ -76,6 +76,7 @@ struct spinlock core_map_splk;
 
 /* Initialization function */
 void vm_bootstrap(void);
+int print_core_map(int nargs, char **args);
 
 /* Fault handling function called by trap code */
 int vm_fault(int faulttype, vaddr_t faultaddress);
@@ -90,9 +91,7 @@ void free_kpages(vaddr_t addr);
 int alloc_upage(struct addrspace *as, vaddr_t vaddr, uint8_t perms, bool as_splk); // 'perms' is nonzero from as_define_region
 int alloc_upages(struct addrspace *as, vaddr_t vaddr, unsigned npages, uint8_t perms);
 void free_upage(struct addrspace *as, vaddr_t vaddr, bool as_splk);
-
-// free all pages referenced by the page table hierarchy starting at ptd in as
-void pth_free(struct addrspace *as);
+void free_upages(struct addrspace *as, vaddr_t vaddr, unsigned npages);
 
 // deep copy all pages in the page table hierarchy in 'old' to 'new'
 void pth_copy(struct addrspace *old, struct addrspace *new);

@@ -10,7 +10,8 @@ void vm_bootstrap(void) {
 	unsigned long i;
 
 	ncmes = ramsize / PAGE_SIZE;
-	unsigned long npages = ((ncmes * sizeof(struct core_map_entry) - 1) / PAGE_SIZE) + 1;
+	unsigned long npages = ROUND_UP(ncmes * sizeof(struct core_map_entry), PAGE_SIZE);
+	//unsigned long npages = ((ncmes * sizeof(struct core_map_entry) - 1) / PAGE_SIZE) + 1;
 	core_map = (struct core_map_entry *) PADDR_TO_KVADDR(ram_stealmem(npages));
 
 	for(i = 0; i < npages; i++) {
@@ -20,6 +21,16 @@ void vm_bootstrap(void) {
 	spinlock_init(&core_map_splk);
 }
 
+// to check for memory leaks
+int print_core_map(int nargs, char **args) {
+	(void) nargs;
+	(void) args;
+	for(unsigned long i = 0; i < ncmes; i++) {
+		struct core_map_entry cme = core_map[i];
+		kprintf("%lu: vaddr: %p, as: %p\n", i, (void *) cme.va, cme.as);
+	}
+	return 0;
+}
 
 int vm_fault(int faulttype, vaddr_t faultaddress) {
 

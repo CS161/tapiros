@@ -44,6 +44,7 @@
 #include <sfs.h>
 #include <syscall.h>
 #include <test.h>
+#include <vm.h>
 #include "opt-synchprobs.h"
 #include "opt-sfs.h"
 #include "opt-net.h"
@@ -677,6 +678,7 @@ static struct {
 	{ "q",		cmd_quit },
 	{ "exit",	cmd_quit },
 	{ "halt",	cmd_quit },
+	{ "cm", 	print_core_map },
 
 #if OPT_SYNCHPROBS
 	/* in-kernel synchronization problem(s) */

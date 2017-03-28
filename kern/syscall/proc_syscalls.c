@@ -179,7 +179,7 @@ int sys_execv(const userptr_t program, userptr_t argv) {
 	}
 
 	char zeros[sizeof(userptr_t)];
-	memset(zeros, 0, sizeof(userptr_t));
+	bzero(zeros, sizeof(userptr_t));
 	while(i > 0) {										// fill new stack with parameter strings
 		i--;
 		int nzeros = sizeof(userptr_t) - (nargvlens[i] % sizeof(userptr_t));	// pad the end with 0s to be 4-aligned (on 32-bit)

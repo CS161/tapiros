@@ -55,7 +55,7 @@ as_create(void)
 	if(as->ptd == NULL) {
 		goto err2;
 	}
-	memset(as->ptd, 0, sizeof(struct page_table_directory));
+	bzero(as->ptd, sizeof(struct page_table_directory));
 
 	as->addr_wchan = wchan_create("addrspace wchan");
 	if(as->addr_wchan == NULL) {
@@ -88,6 +88,8 @@ as_copy(struct addrspace *old, struct addrspace **ret)
 	}
 
 	pth_copy(old, new);
+	new->heap_bottom = old->heap_bottom;
+	new->heap_top = old->heap_top;
 
 	*ret = new;
 	return 0;
@@ -96,7 +98,8 @@ as_copy(struct addrspace *old, struct addrspace **ret)
 void
 as_destroy(struct addrspace *as)
 {
-	pth_free(as);	// must wait for all in-progress swaps to finish
+	free_upages(as, 0, USERSPACETOP / PAGE_SIZE);
+	kfree(as->ptd);
 
 	spinlock_cleanup(&as->addr_splk);
 	wchan_destroy(as->addr_wchan);

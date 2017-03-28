@@ -69,14 +69,18 @@
  * exception handler code) when converted to a vaddr it's *not* NULL, *is*
  * a valid address, and will make a *huge* mess if you scribble on it.
  */
-#define PADDR_TO_KVADDR(paddr) 	((paddr) + MIPS_KSEG0)
-#define PTE_TO_CMI(pte) 		(((pte->addr << 12) - ((vaddr_t)core_map - MIPS_KSEG0)) / PAGE_SIZE)
-#define PADDR_TO_CMI(paddr) 	(((paddr) - ((vaddr_t)core_map - MIPS_KSEG0)) / PAGE_SIZE)
-#define CMI_TO_PADDR(cmi)		(((vaddr_t)core_map + (cmi) * PAGE_SIZE) - MIPS_KSEG0)
+#define PADDR_TO_KVADDR(paddr) 		((paddr) + MIPS_KSEG0)
 
-#define L1INDEX(vaddr)			(vaddr >> 22)
-#define L2INDEX(vaddr)			((vaddr << 10) >> 22)
-#define L12_TO_VADDR(l1, l2)	((l1 << 22) | (l2 << 12))
+#define L1INDEX(vaddr)			((vaddr) >> 22)
+#define L2INDEX(vaddr)			(((vaddr) << 10) >> 22)
+#define L12_TO_VADDR(l1, l2)	(((l1) << 22) | ((l2) << 12))
+
+#define PTE_TO_CMI(pte) 			(((pte->addr << 12) - ((vaddr_t)core_map - MIPS_KSEG0)) / PAGE_SIZE)
+#define PADDR_TO_CMI(paddr) 		(((paddr) - ((vaddr_t)core_map - MIPS_KSEG0)) / PAGE_SIZE)
+#define CMI_TO_PADDR(cmi)			(((vaddr_t)core_map + (cmi) * PAGE_SIZE) - MIPS_KSEG0)
+#define VADDR_TO_PTE(ptd, vaddr)	(&ptd->pts[L1INDEX(vaddr)]->ptes[L2INDEX(vaddr)])
+
+#define ROUND_UP(num, denom)			((((num) - 1) / (denom)) + 1)
 
 /*
  * The top of user space. (Actually, the address immediately above the
