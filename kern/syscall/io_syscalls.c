@@ -22,6 +22,38 @@
 #include <stat.h>
 
 /*
+ * Find the index of a free vfile slot in vfiles.
+ */
+static int add_vfile(struct vfile *vfile, int fd) {
+	int err = 0;
+
+	spinlock_acquire(&gf_lock);	// protect additions in the global file array
+
+	int max = vfilearray_num(vfiles);
+	int slot = -1;
+	for(int i = 0; i < max; i++) {	// iterate through vfiles until we find
+		if(VFILES(i) == NULL) {		// an empty spot or reach the end
+			slot = i;
+			break;
+		}
+	}
+
+	if(slot < 0) {		// add to the end of vfiles
+		err = vfilearray_add(vfiles, vfile, NULL);
+		if(err == 0)
+			CUR_FDS(fd) = max;
+	}
+	else {		// use an empty slot in the middle of vfiles
+		vfilearray_set(vfiles, slot, vfile);
+		CUR_FDS(fd) = slot;
+	}
+
+	spinlock_release(&gf_lock);
+
+	return err;
+}
+
+/*
  * Initialize the vfiles array, including stdin, stdout, and stderr.
  */
 void vfiles_init(void) {
@@ -57,38 +89,6 @@ void vfiles_init(void) {
 	if(sys_open(console, O_WRONLY, NULL))
 		panic("stderr open failed\n");
 	kfree(console);
-}
-
-/*
- * Find the index of a free vfile slot in vfiles.
- */
-static int add_vfile(struct vfile *vfile, int fd) {
-	int err = 0;
-
-	spinlock_acquire(&gf_lock);	// protect additions in the global file array
-
-	int max = vfilearray_num(vfiles);
-	int slot = -1;
-	for(int i = 0; i < max; i++) {	// iterate through vfiles until we find
-		if(VFILES(i) == NULL) {		// an empty spot or reach the end
-			slot = i;
-			break;
-		}
-	}
-
-	if(slot < 0) {		// add to the end of vfiles
-		err = vfilearray_add(vfiles, vfile, NULL);
-		if(err == 0)
-			CUR_FDS(fd) = max;
-	}
-	else {		// use an empty slot in the middle of vfiles
-		vfilearray_set(vfiles, slot, vfile);
-		CUR_FDS(fd) = slot;
-	}
-
-	spinlock_release(&gf_lock);
-
-	return err;
 }
 
 int sys_open(char* pathname, int flags, int *retval) {

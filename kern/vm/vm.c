@@ -153,6 +153,7 @@ vaddr_t alloc_kpages(unsigned npages) {
 
 	KASSERT(ret > (vaddr_t)core_map);
 	KASSERT(ret % PAGE_SIZE == 0);
+	KASSERT(ret < (vaddr_t)core_map + ncmes * PAGE_SIZE);
 
 	return ret;
 }
