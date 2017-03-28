@@ -80,20 +80,16 @@ as_create(void)
 int
 as_copy(struct addrspace *old, struct addrspace **ret)
 {
-	struct addrspace *newas;
+	struct addrspace *new;
 
-	newas = as_create();
-	if (newas==NULL) {
+	new = as_create();
+	if (new == NULL) {
 		return ENOMEM;
 	}
 
-	/*
-	 * Write this.
-	 */
+	pth_copy(old, new);
 
-	(void)old;
-
-	*ret = newas;
+	*ret = new;
 	return 0;
 }
 

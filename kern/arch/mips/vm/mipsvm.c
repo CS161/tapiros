@@ -65,6 +65,7 @@ int alloc_upage(struct addrspace *as, vaddr_t vaddr, uint8_t perms, bool as_splk
 		}
 	}
 	if(i == ncmes) {
+		panic("Out of memory :(\n");
 		// ***handle swap out then allocation
 	}
 
@@ -158,6 +159,48 @@ void pth_free(struct addrspace *as) {
 	kfree(ptd);
 
 	spinlock_release(&as->addr_splk);
+}
+
+// *** Assumes no spinlocks are held
+void pth_copy(struct addrspace *old, struct addrspace *new) {
+
+	spinlock_acquire(&old->addr_splk);
+	// We don't need to acquire new's spinlock because once we put a copied entry into the
+	// core map (so swap functions might now try to access it), we never touch its PTE again
+
+	struct page_table_directory *old_ptd = old->ptd;
+	struct page_table_directory *new_ptd = new->ptd;
+
+	unsigned long max = L1INDEX(USERSPACETOP);	// no page tables address MIPS_KSEG0 or up
+	for(unsigned long i = 0; i < max; i++) {
+		if(old_ptd->pts[i] != 0) {
+			struct page_table *old_pt = old_ptd->pts[i];
+			for(unsigned long j = 0; j < NUM_PTES; j++) {
+				if(old_pt->ptes[j].addr != 0) {
+					union page_table_entry *old_pte = &old_pt->ptes[j];
+					union page_table_entry *new_pte = get_pte(new_ptd, L12_TO_VADDR(i,j));
+					new_pte->addr = 0;
+					new_pte->p = 1;
+
+					int err = alloc_upage(new, L12_TO_VADDR(i,j), 1, true);
+						// use '1' for perms so that any region is valid, not just stack/heap
+						// pretend we hold the spinlock already because we know it's not needed
+					KASSERT(err == 0);
+
+					if(!old_pte->p) {
+						// read from swap into the new page
+					}
+					else {
+						memcpy((void *) PADDR_TO_KVADDR(new_pte->addr << 12), 
+								(void *) PADDR_TO_KVADDR(old_pte->addr << 12), 
+								PAGE_SIZE);
+					}
+				}
+			}
+		}
+	}
+
+	spinlock_release(&old->addr_splk);
 }
 
 

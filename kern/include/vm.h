@@ -94,6 +94,9 @@ void free_upage(struct addrspace *as, vaddr_t vaddr, bool as_splk);
 // free all pages referenced by the page table hierarchy starting at ptd in as
 void pth_free(struct addrspace *as);
 
+// deep copy all pages in the page table hierarchy in 'old' to 'new'
+void pth_copy(struct addrspace *old, struct addrspace *new);
+
 /* TLB shootdown handling called from interprocessor_interrupt */
 void vm_tlbshootdown(const struct tlbshootdown *ts);
 void invalidate_tlb(void);
