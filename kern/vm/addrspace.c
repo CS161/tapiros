@@ -146,14 +146,12 @@ int
 as_define_region(struct addrspace *as, vaddr_t vaddr, size_t memsize,
 		 int readable, int writeable, int executable)
 {
+	(void) readable;
+	(void) writeable;
+	(void) executable;
+
 	vaddr &= PAGE_FRAME;
-	uint8_t perms = 0;
-	if(writeable)
-		perms |= 1;
-	if(readable)
-		perms |= 2;
-	if(executable)
-		perms |= 4;
+	uint8_t perms = 1;
 
 	unsigned npages = (memsize + PAGE_SIZE - 1) / PAGE_SIZE; // round up memsize to next page
 

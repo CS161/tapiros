@@ -21,10 +21,12 @@ static union page_table_entry* get_pte(struct page_table_directory *ptd, vaddr_t
 
 	vaddr_t l2 = (vaddr << 10) >> 22;
 
-	return (union page_table_entry *) (ptd->pts[l1] + l2);
+	KASSERT((unsigned long)(ptd->pts[l1] + l2) % PAGE_SIZE == 0);
+
+	return &ptd->pts[l1]->ptes[l2];
 }
 
-// 'perms' is used to flag executable, read, and write permissions as follows: 00000xrw
+// 'perms' is nonzero when calling from as_define_region()
 // 'as_splk' marks whether the address space spinlock is held when calling the function
 // If no flags are set, appropriate default values for stack/heap are used 
 // (but vaddr must be a valid stack/heap address).
@@ -35,21 +37,8 @@ int alloc_upage(struct addrspace *as, vaddr_t vaddr, uint8_t perms, bool as_splk
 	union page_table_entry new_pte;
 	new_pte.all = 0;
 
-	// sys161 doesn't support executable perms, but might as well support them
-	if(perms != 0) {
-		if(perms & 1)
-			new_pte.w = 1;
-		if(perms & 2)
-			new_pte.r = 1;
-		if(perms & 4)
-			new_pte.x = 1;
-	}
-	else {
-		if((vaddr > as->heap_bottom && vaddr < as->heap_top) || (vaddr > USERSTACKBOTTOM && vaddr < USERSTACK)) {
-			new_pte.w = 1;
-			new_pte.r = 1;
-		}
-		else
+	if(perms == 0) {
+		if(!((vaddr > as->heap_bottom && vaddr < as->heap_top) || (vaddr > USERSTACKBOTTOM && vaddr < USERSTACK)))
 			return EINVAL;
 	}
 
@@ -64,9 +53,10 @@ int alloc_upage(struct addrspace *as, vaddr_t vaddr, uint8_t perms, bool as_splk
 	unsigned long i;
 	for(i = 0; i < ncmes; i++) {
 		if(!core_map[i].md.busy && core_map[i].va == 0) {
+			KASSERT(core_map[i].md.kernel == 0);
 			core_map[i].va = vaddr;
 			core_map[i].as = as;
-			core_map[i].md.busy = 1;
+			core_map[i].md.recent = 1;
 			new_pte.p = 1;
 			new_pte.addr = CMI_TO_PADDR(i) >> 12;
 			memset((void *) PADDR_TO_KVADDR(CMI_TO_PADDR(i)), 0, PAGE_SIZE);
@@ -160,11 +150,6 @@ int perms_fault(struct addrspace *as, vaddr_t faultaddress) {
 
 	union page_table_entry *pte = get_pte(as->ptd, faultaddress);
 
-	if(!pte->w) {	// check if the page actually doesn't permit writes
-		spinlock_release(&as->addr_splk);
-		return EFAULT;
-	}
-
 	unsigned long i = PTE_TO_CMI(pte);
 
 	spinlock_acquire(&core_map_splk);
@@ -230,7 +215,7 @@ int tlb_miss(struct addrspace *as, vaddr_t faultaddress) {
 	uint32_t newentryhi = 0, newentrylo = 0;
 
 	newentryhi = faultaddress & TLBHI_VPAGE;
-	newentrylo = (pte->addr & TLBLO_PPAGE) | TLBLO_VALID;
+	newentrylo = (pte->addr << 12 & TLBLO_PPAGE) | TLBLO_VALID;
 	// write permissions aren't set so we can track the dirty bit
 
 	unsigned long i;
@@ -244,7 +229,7 @@ int tlb_miss(struct addrspace *as, vaddr_t faultaddress) {
 			break;
 		}
 
-		cmj = PADDR_TO_CMI((oldentrylo & TLBLO_PPAGE) << 12);
+		cmj = PADDR_TO_CMI(oldentrylo & TLBLO_PPAGE);
 
 	} while (core_map[cmj].md.busy);	// it's a pain to replace TLB entries in the middle of swap,
 										// and because there are max 32 cpus, max 32 TLB entries can be busy

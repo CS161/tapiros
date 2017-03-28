@@ -141,6 +141,7 @@ vaddr_t alloc_kpages(unsigned npages) {
 	spinlock_release(&core_map_splk);
 
 	KASSERT(ret > (vaddr_t)core_map);
+	KASSERT(ret % PAGE_SIZE == 0);
 
 	return ret;
 }

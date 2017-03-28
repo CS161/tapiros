@@ -94,9 +94,9 @@
 union page_table_entry {
 	struct {
 		unsigned int addr : 20, : 7;	// address in memory or swap
-		unsigned int x : 1;				// executable
-		unsigned int r : 1;				// readable
-		unsigned int w : 1;				// writeable
+		unsigned int x : 1;				// executable (unused)
+		unsigned int r : 1;				// readable (unused)
+		unsigned int w : 1;				// writeable (unused)
 		unsigned int p : 1;				// present
 		unsigned int b : 1;				// busy
 	};
