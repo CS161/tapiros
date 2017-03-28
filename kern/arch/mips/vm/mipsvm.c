@@ -13,13 +13,13 @@
 // ***Assumes that you hold the spinlock of the addrspace 'ptd' belongs to
 static union page_table_entry* get_pte(struct page_table_directory *ptd, vaddr_t vaddr) {
 	
-	vaddr_t l1 = vaddr >> 22;
+	vaddr_t l1 = L1INDEX(vaddr);
 	if(ptd->pts[l1] == 0) {
 		ptd->pts[l1] = kmalloc(sizeof(struct page_table));
 		memset(ptd->pts[l1], 0, sizeof(struct page_table));
 	}
 
-	vaddr_t l2 = (vaddr << 10) >> 22;
+	vaddr_t l2 = L2INDEX(vaddr);
 
 	KASSERT((unsigned long)(ptd->pts[l1] + l2) % PAGE_SIZE == 0);
 
@@ -78,11 +78,12 @@ int alloc_upage(struct addrspace *as, vaddr_t vaddr, uint8_t perms, bool as_splk
 }
 
 
-// ***Assumes that no spinlocks are held
-void free_upage(struct addrspace *as, vaddr_t vaddr) {
+// 'as_splk' marks whether the address space spinlock is held when calling the function
+void free_upage(struct addrspace *as, vaddr_t vaddr, bool as_splk) {
 	KASSERT(vaddr < USERSPACETOP);
 
-	spinlock_acquire(&as->addr_splk);
+	if(!as_splk)
+		spinlock_acquire(&as->addr_splk);
 	
 	union page_table_entry *pte = get_pte(as->ptd, vaddr);
 	KASSERT(pte->addr != 0);
@@ -115,7 +116,8 @@ void free_upage(struct addrspace *as, vaddr_t vaddr) {
 
 	spinlock_release(&core_map_splk);
 
-	spinlock_release(&as->addr_splk);
+	if(!as_splk)
+		spinlock_release(&as->addr_splk);
 }
 
 
@@ -126,7 +128,7 @@ int alloc_upages(struct addrspace *as, vaddr_t vaddr, unsigned npages, uint8_t p
 		int err = alloc_upage(as, vaddr + i * PAGE_SIZE, perms, false);
 		if(err != 0) {
 			for(unsigned j = 0; j < i; j++) {
-				free_upage(as, vaddr + i * PAGE_SIZE);
+				free_upage(as, vaddr + i * PAGE_SIZE, false);
 			}
 			return err;
 		}
@@ -134,14 +136,28 @@ int alloc_upages(struct addrspace *as, vaddr_t vaddr, unsigned npages, uint8_t p
 	return 0;
 }
 
+// *** Assumes no spinlocks are held
+void pth_free(struct addrspace *as) {
+	spinlock_acquire(&as->addr_splk);
 
-void pth_free(struct addrspace *as, struct page_table_directory *ptd) {
+	struct page_table_directory *ptd = as->ptd;
 
-	// doesn't traverse the whole page table yet
-
-	(void) as;
-
+	unsigned long max = L1INDEX(USERSPACETOP);	// no page tables address MIPS_KSEG0 or up
+	for(unsigned long i = 0; i < max; i++) {
+		if(ptd->pts[i] != 0) {
+			struct page_table *pt = ptd->pts[i];
+			for(unsigned long j = 0; j < NUM_PTES; j++) {
+				if(pt->ptes[j].addr != 0) {
+					free_upage(as, L12_TO_VADDR(i, j), true);	
+					// this finds the PTE again inside - might want to refactor to avoid redundancy
+				}
+			}
+			kfree(ptd->pts[i]);
+		}
+	}
 	kfree(ptd);
+
+	spinlock_release(&as->addr_splk);
 }
 
 

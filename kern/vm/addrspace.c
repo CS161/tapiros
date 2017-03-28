@@ -100,7 +100,7 @@ as_copy(struct addrspace *old, struct addrspace **ret)
 void
 as_destroy(struct addrspace *as)
 {
-	pth_free(as, as->ptd);	// must wait for all in-progress swaps to finish
+	pth_free(as);	// must wait for all in-progress swaps to finish
 
 	spinlock_cleanup(&as->addr_splk);
 	wchan_destroy(as->addr_wchan);

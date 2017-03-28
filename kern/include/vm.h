@@ -89,10 +89,10 @@ void free_kpages(vaddr_t addr);
 /* Allocate/free user pages */
 int alloc_upage(struct addrspace *as, vaddr_t vaddr, uint8_t perms, bool as_splk); // 'perms' is nonzero from as_define_region
 int alloc_upages(struct addrspace *as, vaddr_t vaddr, unsigned npages, uint8_t perms);
-void free_upage(struct addrspace *as, vaddr_t vaddr);
+void free_upage(struct addrspace *as, vaddr_t vaddr, bool as_splk);
 
-// free all pages referenced by the page table hierarchy starting at 'ptd'
-void pth_free(struct addrspace *as, struct page_table_directory *ptd);
+// free all pages referenced by the page table hierarchy starting at ptd in as
+void pth_free(struct addrspace *as);
 
 /* TLB shootdown handling called from interprocessor_interrupt */
 void vm_tlbshootdown(const struct tlbshootdown *ts);

@@ -38,7 +38,7 @@ int sys_sbrk(intptr_t amount, int *retval) {
 		as->heap_top += amount;
 
 		for(vaddr_t i = as->heap_top; i < (vaddr_t) *retval; i += PAGE_SIZE) {
-			free_upage(as, i);
+			free_upage(as, i, false);
 		}
 	}
 

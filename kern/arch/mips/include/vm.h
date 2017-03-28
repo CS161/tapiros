@@ -38,8 +38,9 @@
  * Machine-dependent VM system definitions.
  */
 
-#define PAGE_SIZE  			4096         /* size of VM page */
-#define PAGE_FRAME 			0xfffff000   /* mask for getting page number from addr */
+#define PAGE_SIZE  			4096         	// size of VM page
+#define PAGE_FRAME 			0xfffff000   	// mask for getting page number from addr
+#define NUM_PTES			1024			// number of PTES per page table
 
 /*
  * MIPS-I hardwired memory layout:
@@ -73,6 +74,10 @@
 #define PADDR_TO_CMI(paddr) 	(((paddr) - ((vaddr_t)core_map - MIPS_KSEG0)) / PAGE_SIZE)
 #define CMI_TO_PADDR(cmi)		(((vaddr_t)core_map + (cmi) * PAGE_SIZE) - MIPS_KSEG0)
 
+#define L1INDEX(vaddr)			(vaddr >> 22)
+#define L2INDEX(vaddr)			((vaddr << 10) >> 22)
+#define L12_TO_VADDR(l1, l2)	((l1 << 22) | (l2 << 12))
+
 /*
  * The top of user space. (Actually, the address immediately above the
  * last valid user address.)
@@ -88,8 +93,8 @@
  * grows downwards.
  */
 #define USERSTACK     	USERSPACETOP
-#define USERSTACKBOTTOM	USERSPACETOP - (1024 * PAGE_SIZE)
-#define USERHEAPTOP 	USERSTACKBOTTOM
+#define USERSTACKBOTTOM	USERSPACETOP - (1024 * PAGE_SIZE)	// 1024 stack pages allowed
+#define USERHEAPTOP 	USERSTACKBOTTOM						// currently the heap goes right up to the stack
 
 union page_table_entry {
 	struct {
@@ -104,11 +109,11 @@ union page_table_entry {
 };
 
 struct page_table {
-	union page_table_entry ptes[1024];
+	union page_table_entry ptes[NUM_PTES];
 };
 
 struct page_table_directory {
-	struct page_table* pts[1024];
+	struct page_table* pts[NUM_PTES];
 };
 
 /*
