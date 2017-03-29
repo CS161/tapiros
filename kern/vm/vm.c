@@ -30,10 +30,15 @@ void vm_bootstrap(void) {
 int print_core_map(int nargs, char **args) {
 	(void) nargs;
 	(void) args;
+	unsigned long nkernel = 0;
+	unsigned long nuser = 0;
 	for(unsigned long i = 0; i < ncmes; i++) {
 		struct core_map_entry cme = core_map[i];
+		if(cme.md.kernel)
+			nkernel++;
 		kprintf("%lu: vaddr: %p, as: %p, c:%d\n", i, (void *) cme.va, cme.as, cme.md.contig);
 	}
+	kprintf("\nKernel Pages: %lu\nUser Pages: %lu\nTotal Pages: %lu\n\n", nkernel, nuser, nkernel + nuser);
 	return 0;
 }
 

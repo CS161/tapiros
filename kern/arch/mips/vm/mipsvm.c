@@ -257,6 +257,36 @@ int perms_fault(struct addrspace *as, vaddr_t faultaddress) {
 }
 
 
+// *** Assumes address space and core map spinlocks are held
+// Returns the index of an entry in the TLB to be replaced.
+static unsigned long choose_tlb_entry() {
+	uint32_t oldentryhi = 0, oldentrylo = 0;
+	unsigned long old_cmi;
+	unsigned long tlbi;
+
+	do {
+
+		tlbi = random() % NUM_TLB;
+		tlb_read(&oldentryhi, &oldentrylo, tlbi);
+		if((oldentrylo & TLBLO_PPAGE) == 0) {
+			old_cmi = 0;
+			break;
+		}
+
+		old_cmi = PADDR_TO_CMI(oldentrylo & TLBLO_PPAGE);
+
+	} while (core_map[old_cmi].md.busy);	// it's a pain to replace TLB entries in the middle of swap,
+											// and because there are max 32 cpus, max 32 TLB entries can be busy
+
+	if(old_cmi != 0) {
+		core_map[old_cmi].md.tlb = 0;
+		core_map[old_cmi].md.recent = 1;
+	}
+
+	return tlbi;
+}
+
+
 int tlb_miss(struct addrspace *as, vaddr_t faultaddress) {
 	spinlock_acquire(&as->addr_splk);
 
@@ -283,34 +313,15 @@ int tlb_miss(struct addrspace *as, vaddr_t faultaddress) {
 	unsigned long cmi = PTE_TO_CMI(pte);
 	core_map[cmi].md.tlb = 1;
 
-	uint32_t oldentryhi = 0, oldentrylo = 0;
 	uint32_t newentryhi = 0, newentrylo = 0;
 
 	newentryhi = faultaddress & TLBHI_VPAGE;
 	newentrylo = (pte->addr << 12 & TLBLO_PPAGE) | TLBLO_VALID;
 	// write permissions aren't set so we can track the dirty bit
 
-	unsigned long i;
-	unsigned long cmj;
-	do {
+	unsigned long tlbi = choose_tlb_entry();
 
-		i = random() % NUM_TLB;
-		tlb_read(&oldentryhi, &oldentrylo, i);
-		if((oldentrylo & TLBLO_PPAGE) == 0) {
-			cmj = 0;
-			break;
-		}
-
-		cmj = PADDR_TO_CMI(oldentrylo & TLBLO_PPAGE);
-
-	} while (core_map[cmj].md.busy);	// it's a pain to replace TLB entries in the middle of swap,
-										// and because there are max 32 cpus, max 32 TLB entries can be busy
-	if(cmj != 0) {
-		core_map[cmj].md.tlb = 0;
-		core_map[cmj].md.recent = 1;
-	}
-
-	tlb_write(newentryhi, newentrylo, i);
+	tlb_write(newentryhi, newentrylo, tlbi);
 
 	spinlock_release(&core_map_splk);
 	spinlock_release(&as->addr_splk);
