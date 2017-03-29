@@ -102,7 +102,7 @@ runprogram(char *progname)
 
 	int err = 0;
 	char zeros[sizeof(userptr_t)];
-	memset(zeros, 0, sizeof(userptr_t));
+	bzero(zeros, sizeof(userptr_t));
 	size_t len = strlen(progname) + 1;
 	int nzeros = sizeof(userptr_t) - (len % sizeof(userptr_t));	// pad the end with 0s to be 4-aligned (on 32-bit)
 

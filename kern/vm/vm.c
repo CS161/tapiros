@@ -11,7 +11,7 @@
 // for all memory we ever intend to write to.
 void vm_bootstrap(void) {
 	size_t ramsize = ram_getsize();
-	size_t start = ram_stealmem(0);	// get the address of the first writeable memory
+	size_t start = ram_stealmem(0);	// get the address of the first writeable page
 	unsigned long i;
 
 	ncmes = (ramsize - start) / PAGE_SIZE;
@@ -36,6 +36,8 @@ int print_core_map(int nargs, char **args) {
 		struct core_map_entry cme = core_map[i];
 		if(cme.md.kernel)
 			nkernel++;
+		else if(cme.va)
+			nuser++;
 		kprintf("%lu: vaddr: %p, as: %p, c:%d\n", i, (void *) cme.va, cme.as, cme.md.contig);
 	}
 	kprintf("\nKernel Pages: %lu\nUser Pages: %lu\nTotal Pages: %lu\n\n", nkernel, nuser, nkernel + nuser);

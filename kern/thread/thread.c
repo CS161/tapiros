@@ -1225,6 +1225,23 @@ ipi_tlbshootdown(struct cpu *target, const struct tlbshootdown *mapping)
 }
 
 /*
+ * Send a TLB shootdown IPI to all CPUs.
+ */
+void
+ipi_broadcast_tlbshootdown(const struct tlbshootdown *mapping)
+{
+	unsigned i;
+	struct cpu *c;
+
+	for (i=0; i < cpuarray_num(&allcpus); i++) {
+		c = cpuarray_get(&allcpus, i);
+		if (c != curcpu->c_self) {
+			ipi_tlbshootdown(c, mapping);
+		}
+	}
+}
+
+/*
  * Handle an incoming interprocessor interrupt.
  */
 void
