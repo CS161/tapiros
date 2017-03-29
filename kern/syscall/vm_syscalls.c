@@ -27,7 +27,7 @@ int sys_sbrk(intptr_t amount, int *retval) {
 	// because the top half (last bit) of the positive range in vaddr_t 
 	// is only used for kernel address space
 	if(amount >= 0) {
-		if(as->heap_bottom + USERHEAPSIZE - amount <= as->heap_top)
+		if(as->heap_bottom + USERHEAPSIZE < as->heap_top + amount)
 			return ENOMEM;
 
 		*retval = as->heap_top;

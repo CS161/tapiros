@@ -76,7 +76,7 @@ int alloc_upage(struct addrspace *as, vaddr_t vaddr, uint8_t perms, bool as_splk
 	new_pte.all = 0;
 
 	if(perms == 0) {
-		if(vaddr < as->heap_bottom || (vaddr > as->heap_top && vaddr < USERSTACKBOTTOM) || vaddr > USERSTACK)
+		if(vaddr < as->heap_bottom || (vaddr >= as->heap_top && vaddr < USERSTACKBOTTOM) || vaddr >= USERSTACK)
 			return EINVAL;
 	}
 
