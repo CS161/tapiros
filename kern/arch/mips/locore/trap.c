@@ -110,6 +110,7 @@ kill_curthread(vaddr_t epc, unsigned code, vaddr_t vaddr)
 		break;
 	}
 
+	kprintf("Thread killed at instruction %p accessing %p with signal %d\n", (void*) epc, (void*) vaddr, sig);
 	sys__exit(sig, 1 /* signal */);
 }
 

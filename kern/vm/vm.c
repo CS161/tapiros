@@ -27,7 +27,7 @@ int print_core_map(int nargs, char **args) {
 	(void) args;
 	for(unsigned long i = 0; i < ncmes; i++) {
 		struct core_map_entry cme = core_map[i];
-		kprintf("%lu: vaddr: %p, as: %p\n", i, (void *) cme.va, cme.as);
+		kprintf("%lu: vaddr: %p, as: %p, c:%d\n", i, (void *) cme.va, cme.as, cme.md.contig);
 	}
 	return 0;
 }
@@ -146,6 +146,7 @@ vaddr_t alloc_kpages(unsigned npages) {
 	for(j = starts[i]; j < starts[i] + lengths[i]; j++) {
 		core_map[j].va = ((vaddr_t) core_map) + j * PAGE_SIZE;
 		core_map[j].md.kernel = 1;
+		KASSERT(core_map[j].md.contig == 0);
 	}
 	core_map[j-1].md.contig = 1;
 
@@ -164,7 +165,7 @@ void free_kpages(vaddr_t addr) {
 	KASSERT(addr > (vaddr_t) core_map && addr < (vaddr_t) MIPS_KSEG1);
 
 	unsigned long i = (addr - (vaddr_t)core_map) / PAGE_SIZE;	// index in core_map
-
+	
 	spinlock_acquire(&core_map_splk);
 
 	while(core_map[i].md.contig == 0) {
@@ -175,6 +176,9 @@ void free_kpages(vaddr_t addr) {
 		core_map[i].md.kernel = 0;
 		i++;
 	}
+	KASSERT(core_map[i].va != 0);
+	KASSERT(core_map[i].md.kernel == 1);
+	KASSERT(core_map[i].md.contig == 1);
 	core_map[i].va = 0;
 	core_map[i].md.kernel = 0;
 	core_map[i].md.contig = 0;

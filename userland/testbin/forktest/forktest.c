@@ -208,6 +208,7 @@ main(int argc, char *argv[])
 		return 1;
 	}
 	warnx("Starting. Expect this many:");
+	
 	write(STDERR_FILENO, expected, strlen(expected));
 
 	test(nowait);
