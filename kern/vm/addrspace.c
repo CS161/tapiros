@@ -154,7 +154,7 @@ as_define_region(struct addrspace *as, vaddr_t vaddr, size_t memsize,
 
 	unsigned npages = (memsize + PAGE_SIZE - 1) / PAGE_SIZE; // round up memsize to next page
 
-	if(vaddr + npages * PAGE_SIZE > USERHEAPTOP)
+	if(vaddr + npages * PAGE_SIZE > USERSTACKBOTTOM - USERHEAPSIZE)
 		return EINVAL;
 
 	int err = alloc_upages(as, vaddr, npages, perms);

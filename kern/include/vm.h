@@ -43,6 +43,7 @@
 #include <proc.h>
 #include <current.h>
 #include <kern/errno.h>
+#include <bitmap.h>
 
 /* Fault-type arguments to vm_fault() */
 #define VM_FAULT_READ        0    /* A read was attempted */
@@ -74,8 +75,13 @@ struct core_map_entry *core_map;
 unsigned long ncmes;
 struct spinlock core_map_splk;
 
+struct vnode *swap_vnode;
+struct bitmap *swap_bitmap;
+struct spinlock swap_splk;
+
 /* Initialization function */
 void vm_bootstrap(void);
+void swap_bootstrap(void);
 int print_core_map(int nargs, char **args);
 
 /* Fault handling function called by trap code */
@@ -95,6 +101,10 @@ void free_upages(struct addrspace *as, vaddr_t vaddr, unsigned npages);
 
 // deep copy all pages in the page table hierarchy in 'old' to 'new'
 void pth_copy(struct addrspace *old, struct addrspace *new);
+
+/* Swap in/out pages */
+void swap_in(struct addrspace *as, vaddr_t vaddr);
+void swap_out(struct addrspace *as, vaddr_t vaddr);
 
 /* TLB shootdown handling called from interprocessor_interrupt */
 void vm_tlbshootdown(const struct tlbshootdown *ts);

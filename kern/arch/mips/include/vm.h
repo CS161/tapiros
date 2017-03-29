@@ -96,9 +96,9 @@
  * We put the stack at the very top of user virtual memory because it
  * grows downwards.
  */
-#define USERSTACK     	USERSPACETOP
-#define USERSTACKBOTTOM	USERSPACETOP - (1024 * PAGE_SIZE)	// 1024 stack pages allowed
-#define USERHEAPTOP 	USERSTACKBOTTOM						// currently the heap goes right up to the stack
+#define USERSTACK     	(USERSPACETOP)
+#define USERSTACKBOTTOM	(USERSPACETOP - (1024 * PAGE_SIZE))	// 1024 stack pages allowed
+#define USERHEAPSIZE	(128 * PAGE_SIZE)
 
 union page_table_entry {
 	struct {

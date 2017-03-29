@@ -8,6 +8,42 @@
 #include <mips/tlb.h>
 #include <addrspace.h>
 #include <wchan.h>
+#include <vfs.h>
+#include <vnode.h>
+#include <kern/stat.h>
+
+
+void swap_bootstrap(void) {
+	int err = vfs_swapon("lhd0:", &swap_vnode);
+	if(err != 0) {
+		panic("vfs_swapon failed with error: %s\n", strerror(err));
+	}
+
+	struct stat stats; 
+	err = VOP_STAT(swap_vnode, &stats);
+	if(err != 0) {
+		panic("vop_stat on swap_vnode failed with error: %s\n", strerror(err));
+	}
+
+	swap_bitmap = bitmap_create(stats.st_size / PAGE_SIZE);
+	if(swap_bitmap == NULL) {
+		panic("bitmap_create of swap_bitmap failed\n");
+	}
+
+	spinlock_init(&swap_splk);
+}
+
+void swap_in(struct addrspace *as, vaddr_t vaddr) {
+	(void)as;
+	(void)vaddr;
+	return;
+}
+
+void swap_out(struct addrspace *as, vaddr_t vaddr) {
+	(void)as;
+	(void)vaddr;
+	return;
+}
 
 
 // ***Assumes that you hold the spinlock of the addrspace 'ptd' belongs to
