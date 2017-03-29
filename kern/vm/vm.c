@@ -5,11 +5,16 @@
 #include <vm.h>
 
 
+// It's relevant to note that our core map starts at the core map's page;
+// the kernel's code is not referenced in the array. This should reduce
+// the risk of overwriting kernel code and means we can start at an index of 0
+// for all memory we ever intend to write to.
 void vm_bootstrap(void) {
 	size_t ramsize = ram_getsize();
+	size_t start = ram_stealmem(0);	// get the address of the first writeable memory
 	unsigned long i;
 
-	ncmes = ramsize / PAGE_SIZE;
+	ncmes = (ramsize - start) / PAGE_SIZE;
 	unsigned long npages = ROUND_UP(ncmes * sizeof(struct core_map_entry), PAGE_SIZE);
 	//unsigned long npages = ((ncmes * sizeof(struct core_map_entry) - 1) / PAGE_SIZE) + 1;
 	core_map = (struct core_map_entry *) PADDR_TO_KVADDR(ram_stealmem(npages));
