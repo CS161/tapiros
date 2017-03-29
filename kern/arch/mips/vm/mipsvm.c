@@ -29,24 +29,72 @@ void swap_bootstrap(void) {
 	if(swap_bitmap == NULL) {
 		panic("bitmap_create of swap_bitmap failed\n");
 	}
+	bitmap_mark(swap_bitmap, 0); // fill the 0th index, since we don't want bitmap_alloc to return it later
 
-	spinlock_init(&swap_splk);
+	swap_lk = lock_create("swap_lk");
+	if(swap_lk == NULL) {
+		panic("lock_create of swap_lk failed\n");
+	}
+
+	clock = 0;
 }
 
-void swap_in(struct addrspace *as, vaddr_t vaddr) {
+
+// *** Assumes the core map spinlock is held
+// Returns -1 if there are no pages that can be swapped out (kernel or busy)
+static long choose_page_to_swap(void) {
+	unsigned long nchecked = 0;
+	while(nchecked < ncmes) {
+		if(clock == ncmes)	// make the clock circular
+			clock = 0;
+		if(core_map[clock].md.recent == 1)
+			core_map[clock].md.recent = 0;
+		else if(!core_map[clock].md.kernel && !core_map[clock].md.busy && !core_map[clock].md.tlb) {
+			clock++;
+			return clock - 1;
+		}
+		clock++;
+		nchecked++;
+	}
+	unsigned long twice = 2 * ncmes;	// 2 * ncmes shouldn't be calculated each iteration
+	while(nchecked < twice) {			// if there's nothing on the second loop, give up
+		if(clock == ncmes)
+			clock = 0;
+		else if(!core_map[clock].md.kernel && !core_map[clock].md.busy) {	// accept entries in tlb
+			clock++;
+			return clock - 1;
+		}
+		clock++;
+		nchecked++;
+	}
+	return -1;
+}
+
+
+// *** Assumes that [] are held
+// Move the data tracked by 'pte' in swap into memory.
+// (Swap a page out first if there are no free core map entries.)
+void swap_in(struct addrspace *as, union page_table_entry *pte) {
 	(void)as;
-	(void)vaddr;
+	(void)pte;
+	long cmi = choose_page_to_swap();
+	if(cmi == -1) {
+		panic("Out of pages to swap :(\n");
+	}
+
 	return;
 }
 
-void swap_out(struct addrspace *as, vaddr_t vaddr) {
-	(void)as;
-	(void)vaddr;
+
+// *** Assumes that no spinlocks are held
+// Make a copy of data at 'cmi' in swap, and update the PTE/CME appropriately.
+void swap_out(struct core_map_entry *cme) {
+	(void)cme;
 	return;
 }
 
 
-// ***Assumes that you hold the spinlock of the addrspace 'ptd' belongs to
+// *** Assumes that you hold the spinlock of the addrspace 'ptd' belongs to
 // Gets the PTE for a virtual address, or creates one if it doesn't yet exist.
 // If the existence of the PTE is an invariant, use VADDR_TO_PTE() instead.
 static union page_table_entry* get_pte(struct page_table_directory *ptd, vaddr_t vaddr) {
@@ -63,6 +111,7 @@ static union page_table_entry* get_pte(struct page_table_directory *ptd, vaddr_t
 
 	return &ptd->pts[l1]->ptes[l2];
 }
+
 
 // 'perms' is nonzero when calling from as_define_region()
 // 'as_splk' marks whether the address space spinlock is held when calling the function

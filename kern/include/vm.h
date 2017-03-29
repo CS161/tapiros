@@ -72,15 +72,17 @@ struct core_map_entry {
 };
 
 struct core_map_entry *core_map;
+struct bitmap *core_bitmap;
 unsigned long ncmes;
-struct spinlock core_map_splk;
+unsigned long clock;
+struct spinlock core_map_splk;	// protects access to core_map and core_bitmap
 
 unsigned shootdown_count;
 struct spinlock sd_lock;
 
 struct vnode *swap_vnode;
 struct bitmap *swap_bitmap;
-struct spinlock swap_splk;
+struct lock *swap_lk;	// protects access to swap_bitmap and swap_vnode
 
 /* Initialization function */
 void vm_bootstrap(void);
@@ -106,8 +108,8 @@ void free_upages(struct addrspace *as, vaddr_t vaddr, unsigned npages);
 void pth_copy(struct addrspace *old, struct addrspace *new);
 
 /* Swap in/out pages */
-void swap_in(struct addrspace *as, vaddr_t vaddr);
-void swap_out(struct addrspace *as, vaddr_t vaddr);
+void swap_in(struct addrspace *as, union page_table_entry *pte);
+void swap_out(struct core_map_entry *cme);
 
 /* TLB shootdown handling called from interprocessor_interrupt */
 void vm_tlbshootdown(const struct tlbshootdown *ts);
