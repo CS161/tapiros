@@ -38,8 +38,9 @@
  * Machine-dependent VM system definitions.
  */
 
-#define PAGE_SIZE  			4096         /* size of VM page */
-#define PAGE_FRAME 			0xfffff000   /* mask for getting page number from addr */
+#define PAGE_SIZE  			4096         	// size of VM page
+#define PAGE_FRAME 			0xfffff000   	// mask for getting page number from addr
+#define NUM_PTES			1024			// number of PTES per page table
 
 /*
  * MIPS-I hardwired memory layout:
@@ -68,10 +69,18 @@
  * exception handler code) when converted to a vaddr it's *not* NULL, *is*
  * a valid address, and will make a *huge* mess if you scribble on it.
  */
-#define PADDR_TO_KVADDR(paddr) 	((paddr) + MIPS_KSEG0)
-#define PTE_TO_CMI(pte) 		(((pte->addr << 12) - ((vaddr_t)core_map - MIPS_KSEG0)) / PAGE_SIZE)
-#define PADDR_TO_CMI(paddr) 	(((paddr) - ((vaddr_t)core_map - MIPS_KSEG0)) / PAGE_SIZE)
-#define CMI_TO_PADDR(cmi)		(((vaddr_t)core_map + (cmi) * PAGE_SIZE) - MIPS_KSEG0)
+#define PADDR_TO_KVADDR(paddr) 		((paddr) + MIPS_KSEG0)
+
+#define L1INDEX(vaddr)			((vaddr) >> 22)
+#define L2INDEX(vaddr)			(((vaddr) << 10) >> 22)
+#define L12_TO_VADDR(l1, l2)	(((l1) << 22) | ((l2) << 12))
+
+#define PTE_TO_CMI(pte) 			(((pte->addr << 12) - ((vaddr_t)core_map - MIPS_KSEG0)) / PAGE_SIZE)
+#define PADDR_TO_CMI(paddr) 		(((paddr) - ((vaddr_t)core_map - MIPS_KSEG0)) / PAGE_SIZE)
+#define CMI_TO_PADDR(cmi)			(((vaddr_t)core_map + (cmi) * PAGE_SIZE) - MIPS_KSEG0)
+#define VADDR_TO_PTE(ptd, vaddr)	(&ptd->pts[L1INDEX(vaddr)]->ptes[L2INDEX(vaddr)])
+
+#define ROUND_UP(num, denom)			((((num) - 1) / (denom)) + 1)
 
 /*
  * The top of user space. (Actually, the address immediately above the
@@ -87,16 +96,16 @@
  * We put the stack at the very top of user virtual memory because it
  * grows downwards.
  */
-#define USERSTACK     	USERSPACETOP
-#define USERSTACKBOTTOM	USERSPACETOP - (1024 * PAGE_SIZE)
-#define USERHEAPTOP 	USERSTACKBOTTOM
+#define USERSTACK     	(USERSPACETOP)
+#define USERSTACKBOTTOM	(USERSPACETOP - (1024 * PAGE_SIZE))	// 1024 stack pages allowed
+#define USERHEAPSIZE	(262144 * PAGE_SIZE)	// 1 GiB
 
 union page_table_entry {
 	struct {
 		unsigned int addr : 20, : 7;	// address in memory or swap
-		unsigned int x : 1;				// executable
-		unsigned int r : 1;				// readable
-		unsigned int w : 1;				// writeable
+		unsigned int x : 1;				// executable (unused)
+		unsigned int r : 1;				// readable (unused)
+		unsigned int w : 1;				// writeable (unused)
 		unsigned int p : 1;				// present
 		unsigned int b : 1;				// busy
 	};
@@ -104,11 +113,11 @@ union page_table_entry {
 };
 
 struct page_table {
-	union page_table_entry ptes[1024];
+	union page_table_entry ptes[NUM_PTES];
 };
 
 struct page_table_directory {
-	struct page_table* pts[1024];
+	struct page_table* pts[NUM_PTES];
 };
 
 /*

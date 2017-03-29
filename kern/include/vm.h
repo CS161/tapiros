@@ -43,6 +43,7 @@
 #include <proc.h>
 #include <current.h>
 #include <kern/errno.h>
+#include <bitmap.h>
 
 /* Fault-type arguments to vm_fault() */
 #define VM_FAULT_READ        0    /* A read was attempted */
@@ -77,8 +78,14 @@ struct spinlock core_map_splk;
 unsigned shootdown_count;
 struct spinlock sd_lock;
 
+struct vnode *swap_vnode;
+struct bitmap *swap_bitmap;
+struct spinlock swap_splk;
+
 /* Initialization function */
 void vm_bootstrap(void);
+void swap_bootstrap(void);
+int print_core_map(int nargs, char **args);
 
 /* Fault handling function called by trap code */
 int vm_fault(int faulttype, vaddr_t faultaddress);
@@ -90,12 +97,17 @@ vaddr_t alloc_kpages(unsigned npages);
 void free_kpages(vaddr_t addr);
 
 /* Allocate/free user pages */
-int alloc_upage(struct addrspace *as, vaddr_t vaddr, uint8_t perms, bool as_splk); // 'perms' has the form 00000xrw
+int alloc_upage(struct addrspace *as, vaddr_t vaddr, uint8_t perms, bool as_splk); // 'perms' is nonzero from as_define_region
 int alloc_upages(struct addrspace *as, vaddr_t vaddr, unsigned npages, uint8_t perms);
-void free_upage(struct addrspace *as, vaddr_t vaddr);
+void free_upage(struct addrspace *as, vaddr_t vaddr, bool as_splk);
+void free_upages(struct addrspace *as, vaddr_t vaddr, unsigned npages);
 
-// free all pages referenced by the page table hierarchy starting at 'ptd'
-void pth_free(struct addrspace *as, struct page_table_directory *ptd);
+// deep copy all pages in the page table hierarchy in 'old' to 'new'
+void pth_copy(struct addrspace *old, struct addrspace *new);
+
+/* Swap in/out pages */
+void swap_in(struct addrspace *as, vaddr_t vaddr);
+void swap_out(struct addrspace *as, vaddr_t vaddr);
 
 /* TLB shootdown handling called from interprocessor_interrupt */
 void vm_tlbshootdown(const struct tlbshootdown *ts);

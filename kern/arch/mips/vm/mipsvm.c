@@ -8,25 +8,63 @@
 #include <mips/tlb.h>
 #include <addrspace.h>
 #include <wchan.h>
-#include <current.h>
-#include <thread.h>
+#include <vfs.h>
+#include <vnode.h>
+#include <kern/stat.h>
+
+
+void swap_bootstrap(void) {
+	int err = vfs_swapon("lhd0:", &swap_vnode);
+	if(err != 0) {
+		panic("vfs_swapon failed with error: %s\n", strerror(err));
+	}
+
+	struct stat stats; 
+	err = VOP_STAT(swap_vnode, &stats);
+	if(err != 0) {
+		panic("vop_stat on swap_vnode failed with error: %s\n", strerror(err));
+	}
+
+	swap_bitmap = bitmap_create(stats.st_size / PAGE_SIZE);
+	if(swap_bitmap == NULL) {
+		panic("bitmap_create of swap_bitmap failed\n");
+	}
+
+	spinlock_init(&swap_splk);
+}
+
+void swap_in(struct addrspace *as, vaddr_t vaddr) {
+	(void)as;
+	(void)vaddr;
+	return;
+}
+
+void swap_out(struct addrspace *as, vaddr_t vaddr) {
+	(void)as;
+	(void)vaddr;
+	return;
+}
 
 
 // ***Assumes that you hold the spinlock of the addrspace 'ptd' belongs to
+// Gets the PTE for a virtual address, or creates one if it doesn't yet exist.
+// If the existence of the PTE is an invariant, use VADDR_TO_PTE() instead.
 static union page_table_entry* get_pte(struct page_table_directory *ptd, vaddr_t vaddr) {
 	
-	vaddr_t l1 = vaddr >> 22;
+	vaddr_t l1 = L1INDEX(vaddr);
 	if(ptd->pts[l1] == 0) {
 		ptd->pts[l1] = kmalloc(sizeof(struct page_table));
-		memset(ptd->pts[l1], 0, sizeof(struct page_table));
+		bzero(ptd->pts[l1], sizeof(struct page_table));
 	}
 
-	vaddr_t l2 = (vaddr << 10) >> 22;
+	vaddr_t l2 = L2INDEX(vaddr);
 
-	return (union page_table_entry *) (ptd->pts[l1] + l2);
+	KASSERT((unsigned long)(ptd->pts[l1] + l2) % PAGE_SIZE == 0);
+
+	return &ptd->pts[l1]->ptes[l2];
 }
 
-// 'perms' is used to flag executable, read, and write permissions as follows: 00000xrw
+// 'perms' is nonzero when calling from as_define_region()
 // 'as_splk' marks whether the address space spinlock is held when calling the function
 // If no flags are set, appropriate default values for stack/heap are used 
 // (but vaddr must be a valid stack/heap address).
@@ -37,21 +75,8 @@ int alloc_upage(struct addrspace *as, vaddr_t vaddr, uint8_t perms, bool as_splk
 	union page_table_entry new_pte;
 	new_pte.all = 0; //Clear entry
 
-	// sys161 doesn't support executable perms, but might as well support them
-	if(perms != 0) {
-		if(perms & 1)
-			new_pte.w = 1;
-		if(perms & 2)
-			new_pte.r = 1;
-		if(perms & 4)
-			new_pte.x = 1;
-	}
-	else {
-		if((vaddr > as->heap_bottom && vaddr < as->heap_top) || (vaddr > USERSTACKBOTTOM && vaddr < USERSTACK)) {
-			new_pte.w = 1;
-			new_pte.r = 1;
-		}
-		else
+	if(perms == 0) {
+		if(vaddr < as->heap_bottom || (vaddr >= as->heap_top && vaddr < USERSTACKBOTTOM) || vaddr >= USERSTACK)
 			return EINVAL;
 	}
 
@@ -66,17 +91,19 @@ int alloc_upage(struct addrspace *as, vaddr_t vaddr, uint8_t perms, bool as_splk
 	unsigned long i;
 	for(i = 0; i < ncmes; i++) {
 		if(!core_map[i].md.busy && core_map[i].va == 0) {
+			KASSERT(core_map[i].md.kernel == 0);
 			core_map[i].va = vaddr;
 			core_map[i].as = as;
-			core_map[i].md.busy = 1;
+			core_map[i].md.recent = 1;
 			new_pte.p = 1;
 			new_pte.addr = CMI_TO_PADDR(i) >> 12;
-			memset((void *) PADDR_TO_KVADDR(CMI_TO_PADDR(i)), 0, PAGE_SIZE);
+			bzero((void *) PADDR_TO_KVADDR(CMI_TO_PADDR(i)), PAGE_SIZE);
 			*pte = new_pte;
 			break;
 		}
 	}
 	if(i == ncmes) {
+		panic("Out of memory :(\n");
 		// ***handle swap out then allocation
 	}
 
@@ -90,13 +117,14 @@ int alloc_upage(struct addrspace *as, vaddr_t vaddr, uint8_t perms, bool as_splk
 }
 
 
-// ***Assumes that no spinlocks are held
-void free_upage(struct addrspace *as, vaddr_t vaddr) {
+// 'as_splk' marks whether the address space spinlock is held when calling the function
+void free_upage(struct addrspace *as, vaddr_t vaddr, bool as_splk) {
 	KASSERT(vaddr < USERSPACETOP);
 
-	spinlock_acquire(&as->addr_splk);
-	
-	union page_table_entry *pte = get_pte(as->ptd, vaddr);
+	if(!as_splk)
+		spinlock_acquire(&as->addr_splk);
+
+	union page_table_entry *pte = VADDR_TO_PTE(as->ptd, vaddr);
 	KASSERT(pte->addr != 0);
 
 	unsigned long i = PTE_TO_CMI(pte);
@@ -127,18 +155,19 @@ void free_upage(struct addrspace *as, vaddr_t vaddr) {
 
 	spinlock_release(&core_map_splk);
 
-	spinlock_release(&as->addr_splk);
+	if(!as_splk)
+		spinlock_release(&as->addr_splk);
 }
 
 
-// ***Assumes no spinlocks are held
+// *** Assumes no spinlocks are held
 // calls alloc_upage() multiple times with error handling
 int alloc_upages(struct addrspace *as, vaddr_t vaddr, unsigned npages, uint8_t perms) {
 	for(unsigned i = 0; i < npages; i++) {
 		int err = alloc_upage(as, vaddr + i * PAGE_SIZE, perms, false);
 		if(err != 0) {
 			for(unsigned j = 0; j < i; j++) {
-				free_upage(as, vaddr + i * PAGE_SIZE);
+				free_upage(as, vaddr + i * PAGE_SIZE, false);
 			}
 			return err;
 		}
@@ -146,26 +175,88 @@ int alloc_upages(struct addrspace *as, vaddr_t vaddr, unsigned npages, uint8_t p
 	return 0;
 }
 
+// *** Assumes no spinlocks are held
+// calls free_upage() on pages that have contents
+void free_upages(struct addrspace *as, vaddr_t vaddr, unsigned npages) {
+	spinlock_acquire(&as->addr_splk);
 
-void pth_free(struct addrspace *as, struct page_table_directory *ptd) {
+	struct page_table_directory *ptd = as->ptd;
 
-	// doesn't traverse the whole page table yet
+	unsigned long l1_start = L1INDEX(vaddr);
+	unsigned long l1_max = l1_start + ROUND_UP(npages, NUM_PTES);
+	for(unsigned long i = l1_start; i < l1_max; i++) {
 
-	(void) as;
+		if(ptd->pts[i] != 0) {
+			struct page_table *pt = ptd->pts[i];
 
-	kfree(ptd);
+			unsigned long l2_start = (i == l1_start) ? L2INDEX(vaddr) : 0;
+			unsigned long l2_max = (i == l1_max - 1) ? L2INDEX(vaddr + npages * PAGE_SIZE) : NUM_PTES;
+			if(l2_max == 0)	// previous line doesn't work for ptd-aligned vaddrs
+				l2_max = NUM_PTES;
+
+			for(unsigned long j = l2_start; j < l2_max; j++) {
+				if(pt->ptes[j].addr != 0)
+					free_upage(as, L12_TO_VADDR(i, j), true);	
+			}
+			if(l2_start == 0 && l2_max == NUM_PTES) {
+				kfree(ptd->pts[i]);
+				ptd->pts[i] = 0;
+			}
+		}
+
+	}
+
+	spinlock_release(&as->addr_splk);
+}
+
+
+// *** Assumes no spinlocks are held
+void pth_copy(struct addrspace *old, struct addrspace *new) {
+
+	spinlock_acquire(&old->addr_splk);
+	// We don't need to acquire new's spinlock because once we put a copied entry into the
+	// core map (so swap functions might now try to access it), we never touch its PTE again
+
+	struct page_table_directory *old_ptd = old->ptd;
+	struct page_table_directory *new_ptd = new->ptd;
+
+	unsigned long max = L1INDEX(USERSPACETOP);	// no page tables address MIPS_KSEG0 or up
+	for(unsigned long i = 0; i < max; i++) {
+		if(old_ptd->pts[i] != 0) {
+			struct page_table *old_pt = old_ptd->pts[i];
+			for(unsigned long j = 0; j < NUM_PTES; j++) {
+				if(old_pt->ptes[j].addr != 0) {
+					union page_table_entry *old_pte = &old_pt->ptes[j];
+					union page_table_entry *new_pte = get_pte(new_ptd, L12_TO_VADDR(i,j));
+					new_pte->addr = 0;
+					new_pte->p = 1;
+
+					int err = alloc_upage(new, L12_TO_VADDR(i,j), 1, true);
+						// use '1' for perms so that any region is valid, not just stack/heap
+						// pretend we hold the spinlock already because we know it's not needed
+					KASSERT(err == 0);
+
+					if(!old_pte->p) {
+						// read from swap into the new page
+					}
+					else {
+						memcpy((void *) PADDR_TO_KVADDR(new_pte->addr << 12), 
+								(void *) PADDR_TO_KVADDR(old_pte->addr << 12), 
+								PAGE_SIZE);
+					}
+				}
+			}
+		}
+	}
+
+	spinlock_release(&old->addr_splk);
 }
 
 
 int perms_fault(struct addrspace *as, vaddr_t faultaddress) {
 	spinlock_acquire(&as->addr_splk);
 
-	union page_table_entry *pte = get_pte(as->ptd, faultaddress);
-
-	if(!pte->w) {	// check if the page actually doesn't permit writes
-		spinlock_release(&as->addr_splk);
-		return EFAULT;
-	}
+	union page_table_entry *pte = VADDR_TO_PTE(as->ptd, faultaddress);
 
 	unsigned long i = PTE_TO_CMI(pte);
 
@@ -202,6 +293,36 @@ int perms_fault(struct addrspace *as, vaddr_t faultaddress) {
 }
 
 
+// *** Assumes address space and core map spinlocks are held
+// Returns the index of an entry in the TLB to be replaced.
+static unsigned long choose_tlb_entry() {
+	uint32_t oldentryhi = 0, oldentrylo = 0;
+	unsigned long old_cmi;
+	unsigned long tlbi;
+
+	do {
+
+		tlbi = random() % NUM_TLB;
+		tlb_read(&oldentryhi, &oldentrylo, tlbi);
+		if((oldentrylo & TLBLO_PPAGE) == 0) {
+			old_cmi = 0;
+			break;
+		}
+
+		old_cmi = PADDR_TO_CMI(oldentrylo & TLBLO_PPAGE);
+
+	} while (core_map[old_cmi].md.busy);	// it's a pain to replace TLB entries in the middle of swap,
+											// and because there are max 32 cpus, max 32 TLB entries can be busy
+
+	if(old_cmi != 0) {
+		core_map[old_cmi].md.tlb = 0;
+		core_map[old_cmi].md.recent = 1;
+	}
+
+	return tlbi;
+}
+
+
 int tlb_miss(struct addrspace *as, vaddr_t faultaddress) {
 	spinlock_acquire(&as->addr_splk);
 
@@ -228,34 +349,15 @@ int tlb_miss(struct addrspace *as, vaddr_t faultaddress) {
 	unsigned long cmi = PTE_TO_CMI(pte);
 	core_map[cmi].md.tlb = 1;
 
-	uint32_t oldentryhi = 0, oldentrylo = 0;
 	uint32_t newentryhi = 0, newentrylo = 0;
 
 	newentryhi = faultaddress & TLBHI_VPAGE;
-	newentrylo = (pte->addr & TLBLO_PPAGE) | TLBLO_VALID;
+	newentrylo = (pte->addr << 12 & TLBLO_PPAGE) | TLBLO_VALID;
 	// write permissions aren't set so we can track the dirty bit
 
-	unsigned long i;
-	unsigned long cmj;
-	do {
+	unsigned long tlbi = choose_tlb_entry();
 
-		i = random() % NUM_TLB;
-		tlb_read(&oldentryhi, &oldentrylo, i);
-		if((oldentrylo & TLBLO_PPAGE) == 0) {
-			cmj = 0;
-			break;
-		}
-
-		cmj = PADDR_TO_CMI((oldentrylo & TLBLO_PPAGE) << 12);
-
-	} while (core_map[cmj].md.busy);	// it's a pain to replace TLB entries in the middle of swap,
-										// and because there are max 32 cpus, max 32 TLB entries can be busy
-	if(cmj != 0) {
-		core_map[cmj].md.tlb = 0;
-		core_map[cmj].md.recent = 1;
-	}
-
-	tlb_write(newentryhi, newentrylo, i);
+	tlb_write(newentryhi, newentrylo, tlbi);
 
 	spinlock_release(&core_map_splk);
 	spinlock_release(&as->addr_splk);

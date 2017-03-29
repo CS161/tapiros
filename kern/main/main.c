@@ -137,6 +137,7 @@ boot(void)
 
 	/* Buffer cache */
 	buffer_bootstrap();
+	swap_bootstrap();
 
 	/* Default bootfs - but ignore failure, in case emu0 doesn't exist */
 	vfs_setbootfs("emu0");

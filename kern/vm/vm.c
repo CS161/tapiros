@@ -5,12 +5,18 @@
 #include <vm.h>
 
 
+// It's relevant to note that our core map starts at the core map's page;
+// the kernel's code is not referenced in the array. This should reduce
+// the risk of overwriting kernel code and means we can start at an index of 0
+// for all memory we ever intend to write to.
 void vm_bootstrap(void) {
 	size_t ramsize = ram_getsize();
+	size_t start = ram_stealmem(0);	// get the address of the first writeable page
 	unsigned long i;
 
-	ncmes = ramsize / PAGE_SIZE;
-	unsigned long npages = ((ncmes * sizeof(struct core_map_entry) - 1) / PAGE_SIZE) + 1;
+	ncmes = (ramsize - start) / PAGE_SIZE;
+	unsigned long npages = ROUND_UP(ncmes * sizeof(struct core_map_entry), PAGE_SIZE);
+	//unsigned long npages = ((ncmes * sizeof(struct core_map_entry) - 1) / PAGE_SIZE) + 1;
 	core_map = (struct core_map_entry *) PADDR_TO_KVADDR(ram_stealmem(npages));
 
 	for(i = 0; i < npages; i++) {
@@ -20,6 +26,23 @@ void vm_bootstrap(void) {
 	spinlock_init(&core_map_splk);
 }
 
+// to check for memory leaks
+int print_core_map(int nargs, char **args) {
+	(void) nargs;
+	(void) args;
+	unsigned long nkernel = 0;
+	unsigned long nuser = 0;
+	for(unsigned long i = 0; i < ncmes; i++) {
+		struct core_map_entry cme = core_map[i];
+		if(cme.md.kernel)
+			nkernel++;
+		else if(cme.va)
+			nuser++;
+		kprintf("%lu: vaddr: %p, as: %p, c:%d\n", i, (void *) cme.va, cme.as, cme.md.contig);
+	}
+	kprintf("\nKernel Pages: %lu\nUser Pages: %lu\nTotal Pages: %lu\n\n", nkernel, nuser, nkernel + nuser);
+	return 0;
+}
 
 int vm_fault(int faulttype, vaddr_t faultaddress) {
 
@@ -135,12 +158,15 @@ vaddr_t alloc_kpages(unsigned npages) {
 	for(j = starts[i]; j < starts[i] + lengths[i]; j++) {
 		core_map[j].va = ((vaddr_t) core_map) + j * PAGE_SIZE;
 		core_map[j].md.kernel = 1;
+		KASSERT(core_map[j].md.contig == 0);
 	}
 	core_map[j-1].md.contig = 1;
 
 	spinlock_release(&core_map_splk);
 
 	KASSERT(ret > (vaddr_t)core_map);
+	KASSERT(ret % PAGE_SIZE == 0);
+	KASSERT(ret < (vaddr_t)core_map + ncmes * PAGE_SIZE);
 
 	return ret;
 }
@@ -151,7 +177,7 @@ void free_kpages(vaddr_t addr) {
 	KASSERT(addr > (vaddr_t) core_map && addr < (vaddr_t) MIPS_KSEG1);
 
 	unsigned long i = (addr - (vaddr_t)core_map) / PAGE_SIZE;	// index in core_map
-
+	
 	spinlock_acquire(&core_map_splk);
 
 	while(core_map[i].md.contig == 0) {
@@ -162,6 +188,9 @@ void free_kpages(vaddr_t addr) {
 		core_map[i].md.kernel = 0;
 		i++;
 	}
+	KASSERT(core_map[i].va != 0);
+	KASSERT(core_map[i].md.kernel == 1);
+	KASSERT(core_map[i].md.contig == 1);
 	core_map[i].va = 0;
 	core_map[i].md.kernel = 0;
 	core_map[i].md.contig = 0;

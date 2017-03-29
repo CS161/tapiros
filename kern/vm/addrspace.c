@@ -55,7 +55,7 @@ as_create(void)
 	if(as->ptd == NULL) {
 		goto err2;
 	}
-	memset(as->ptd, 0, sizeof(struct page_table_directory));
+	bzero(as->ptd, sizeof(struct page_table_directory));
 
 	as->addr_wchan = wchan_create("addrspace wchan");
 	if(as->addr_wchan == NULL) {
@@ -80,27 +80,26 @@ as_create(void)
 int
 as_copy(struct addrspace *old, struct addrspace **ret)
 {
-	struct addrspace *newas;
+	struct addrspace *new;
 
-	newas = as_create();
-	if (newas==NULL) {
+	new = as_create();
+	if (new == NULL) {
 		return ENOMEM;
 	}
 
-	/*
-	 * Write this.
-	 */
+	pth_copy(old, new);
+	new->heap_bottom = old->heap_bottom;
+	new->heap_top = old->heap_top;
 
-	(void)old;
-
-	*ret = newas;
+	*ret = new;
 	return 0;
 }
 
 void
 as_destroy(struct addrspace *as)
 {
-	pth_free(as, as->ptd);	// must wait for all in-progress swaps to finish
+	free_upages(as, 0, USERSPACETOP / PAGE_SIZE);
+	kfree(as->ptd);
 
 	spinlock_cleanup(&as->addr_splk);
 	wchan_destroy(as->addr_wchan);
@@ -146,18 +145,16 @@ int
 as_define_region(struct addrspace *as, vaddr_t vaddr, size_t memsize,
 		 int readable, int writeable, int executable)
 {
+	(void) readable;
+	(void) writeable;
+	(void) executable;
+
 	vaddr &= PAGE_FRAME;
-	uint8_t perms = 0;
-	if(writeable)
-		perms |= 1;
-	if(readable)
-		perms |= 2;
-	if(executable)
-		perms |= 4;
+	uint8_t perms = 1;
 
 	unsigned npages = (memsize + PAGE_SIZE - 1) / PAGE_SIZE; // round up memsize to next page
 
-	if(vaddr + npages * PAGE_SIZE > USERHEAPTOP)
+	if(vaddr + npages * PAGE_SIZE > USERSTACKBOTTOM - USERHEAPSIZE)
 		return EINVAL;
 
 	int err = alloc_upages(as, vaddr, npages, perms);

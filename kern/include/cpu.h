@@ -171,7 +171,9 @@ void cpu_halt(void);
 void ipi_send(struct cpu *target, int code);
 void ipi_broadcast(int code);
 void ipi_tlbshootdown(struct cpu *target, const struct tlbshootdown *mapping);
+
 void ipi_broadcast_shootdown(uint32_t oldentryhi, struct addrspace *targetaddress);
+
 void interprocessor_interrupt(void);
 
 

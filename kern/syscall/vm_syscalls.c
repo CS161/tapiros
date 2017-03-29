@@ -20,11 +20,14 @@ int sys_sbrk(intptr_t amount, int *retval) {
 	
 	struct addrspace *as = curproc->p_addrspace;
 
+	// We don't need synchronization for heap_bottom and heap_top
+	// because there can only be one thread per address space
+
 	// We don't need to worry about signed/unsigned having different ranges
 	// because the top half (last bit) of the positive range in vaddr_t 
 	// is only used for kernel address space
 	if(amount >= 0) {
-		if(USERHEAPTOP - amount > as->heap_top)
+		if(as->heap_bottom + USERHEAPSIZE < as->heap_top + amount)
 			return ENOMEM;
 
 		*retval = as->heap_top;
@@ -37,9 +40,7 @@ int sys_sbrk(intptr_t amount, int *retval) {
 		*retval = as->heap_top;
 		as->heap_top += amount;
 
-		for(vaddr_t i = as->heap_top; i < (vaddr_t) *retval; i += PAGE_SIZE) {
-			free_upage(as, i);
-		}
+		free_upages(as, as->heap_top, -(amount / PAGE_SIZE));
 	}
 
 	return 0;
