@@ -66,7 +66,7 @@ struct wchan {
 /* Master array of CPUs. */
 DECLARRAY(cpu, static __UNUSED inline);
 DEFARRAY(cpu, static __UNUSED inline);
-static struct cpuarray allcpus;
+struct cpuarray allcpus;
 
 /* Used to wait for secondary CPUs to come online. */
 static struct semaphore *cpu_startup_sem;
@@ -1158,6 +1158,36 @@ wchan_isempty(struct wchan *wc, struct spinlock *lk)
 /*
  * Machine-independent IPI handling
  */
+
+//Broadcast shootdown requests to all CPUs Shootdown struct should also carry address space information so the handler could wake the thread again.
+//This preassumes that the spinlock has already been acquired of the address space needed to be shot down.
+void ipi_broadcast_shootdown(uint32_t oldentryhi, struct addrspace *targetaddress) {
+	int spl = splhigh(); //Prevent getting undermined whilst itself trying to broadcast
+	unsigned i, cpu_total;
+	cpu_total = cpuarray_num(&allcpus);
+	struct cpu *c;
+
+	struct tlbshootdown* ts = (struct tlbshootdown*) kmalloc(sizeof(struct tlbshootdown));
+	ts->oldentryhi = oldentryhi; ts->targetaddress = targetaddress;
+	ts->shootdown_count = cpu_total; ts->sd_lock = (struct spinlock*) kmalloc(sizeof(struct spinlock));
+	
+	spinlock_init(ts->sd_lock);
+	for (i=0; i < cpu_total; i++) {
+		c = cpuarray_get(&allcpus, i);
+		if (c != curcpu->c_self) {
+			ipi_tlbshootdown(c, ts);
+		}
+	}
+
+	while(ts->shootdown_count > 0){
+		wchan_sleep(targetaddress->addr_wchan, &(targetaddress->addr_splk)); //sleep for 3 (CPUs to finish doing their shootdowns)
+	} //it could be possible that it's woken by another thread.
+	
+	KASSERT(ts->shootdown_count == 0); //By the time this is woken, there should be absolutely nothing left.
+	splx(spl);
+	kfree(ts->sd_lock);
+	kfree(ts);
+}
 
 /*
  * Send an IPI (inter-processor interrupt) to the specified CPU.

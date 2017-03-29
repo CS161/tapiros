@@ -75,8 +75,6 @@ struct cpu;
 	thread enters the high priority queue.
 */
 
-
-
 /* States a thread can be in. */
 typedef enum {
 	S_RUN,		/* running */

@@ -146,6 +146,9 @@ paddr_t ram_getfirstfree(void);
 
 struct tlbshootdown {
 	uint32_t oldentryhi;
+	struct addrspace *targetaddress;
+	unsigned shootdown_count;
+	struct spinlock *sd_lock;
 };
 
 #define TLBSHOOTDOWN_MAX 16

@@ -8,6 +8,8 @@
 #include <mips/tlb.h>
 #include <addrspace.h>
 #include <wchan.h>
+#include <current.h>
+#include <thread.h>
 
 
 // ***Assumes that you hold the spinlock of the addrspace 'ptd' belongs to
@@ -33,7 +35,7 @@ int alloc_upage(struct addrspace *as, vaddr_t vaddr, uint8_t perms, bool as_splk
 	KASSERT(vaddr < USERSPACETOP);
 
 	union page_table_entry new_pte;
-	new_pte.all = 0;
+	new_pte.all = 0; //Clear entry
 
 	// sys161 doesn't support executable perms, but might as well support them
 	if(perms != 0) {
@@ -266,9 +268,16 @@ void invalidate_tlb(void) {
 		tlb_write(TLBHI_INVALID(i), TLBLO_INVALID(), i);
 }
 
+void vm_tlbshootdown(const struct tlbshootdown *ts){
+	int res = tlb_probe(ts->oldentryhi, 0);
+	if (res > -1 ){
+		tlb_write(TLBHI_INVALID(res), TLBLO_INVALID(),res);
+	}
+	spinlock_acquire(ts->sd_lock);
+	shootdown_count--;
+	if(shootdown_count == 0){ //Last CPU gets to wake all!
+		wchan_wakeall(ts->targetaddress->addr_wchan, &(ts->targetaddress->addr_splk));
+	}
+	spinlock_release(ts->sd_lock);
 
-void vm_tlbshootdown(const struct tlbshootdown *ts) {
-	(void)ts;
-
-	panic("Can't vm_tlbshootdown yet!\n");
 }

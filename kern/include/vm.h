@@ -74,6 +74,9 @@ struct core_map_entry *core_map;
 unsigned long ncmes;
 struct spinlock core_map_splk;
 
+unsigned shootdown_count;
+struct spinlock sd_lock;
+
 /* Initialization function */
 void vm_bootstrap(void);
 
