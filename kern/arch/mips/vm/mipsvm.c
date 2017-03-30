@@ -65,7 +65,7 @@ static long choose_page_to_swap(void) {
 	while(nchecked < twice) {			// if there's nothing on the second loop, give up
 		if(clock == ncmes)
 			clock = 0;
-		else if(!core_map[clock].md.kernel && !core_map[clock].md.busy) {	// accept entries in tlb
+		if(!core_map[clock].md.kernel && !core_map[clock].md.busy) {	// accept entries in tlb
 			clock++;
 			return clock - 1;
 		}
@@ -82,6 +82,8 @@ static long choose_page_to_swap(void) {
 void swap_copy_out(struct addrspace *as, unsigned long cmi) {
 
 	struct core_map_entry *cme = &core_map[cmi];
+
+	KASSERT(cme->md.kernel == 0);
 
 	unsigned int swapi; 
 	
@@ -135,14 +137,20 @@ void swap_out(unsigned long cmi) {
 	spinlock_acquire(&as->addr_splk);
 	spinlock_acquire(&core_map_splk);
 
+	union page_table_entry *pte = VADDR_TO_PTE(cme->as->ptd, cme->va);
+
+	while(pte->b) {
+		spinlock_release(&core_map_splk);
+
+		wchan_sleep(as->addr_wchan, &as->addr_splk);
+
+		spinlock_acquire(&core_map_splk);
+	}
+
 	swap_copy_out(as, cmi);
 
 	KASSERT(!cme->md.busy);
 	KASSERT(cme->md.s_pres);
-
-	union page_table_entry *pte = VADDR_TO_PTE(cme->as->ptd, cme->va);
-
-	KASSERT(!pte->b);
 
 	pte->p = 0;
 	pte->addr = cme->md.swap;
@@ -164,6 +172,8 @@ void swap_copy_in(struct addrspace *as, vaddr_t vaddr, unsigned long cmi) {
 	union page_table_entry *pte = VADDR_TO_PTE(as->ptd, vaddr);
 	struct core_map_entry *cme = &core_map[cmi];
 
+	KASSERT(cme->md.kernel == 0);
+
 	KASSERT(pte->p != 1);
 	KASSERT(pte->addr != 0);
 
@@ -174,6 +184,10 @@ void swap_copy_in(struct addrspace *as, vaddr_t vaddr, unsigned long cmi) {
 	spinlock_release(&as->addr_splk);
 
 	lock_acquire(swap_lk);
+
+	if(pte->addr > 2000) {
+		kprintf("Weird");
+	}
 
 	struct iovec iov;
 	struct uio uio;
@@ -212,6 +226,8 @@ void swap_in(struct addrspace *as, vaddr_t vaddr) {
 		panic("Out of pages to swap :(\n");
 	}
 
+	KASSERT(core_map[cmi].md.kernel == 0);
+
 	if(core_map[cmi].va != 0) {
 		core_map[cmi].md.busy = 1;
 		spinlock_release(&core_map_splk);
@@ -242,8 +258,6 @@ static union page_table_entry* get_pte(struct page_table_directory *ptd, vaddr_t
 	}
 
 	vaddr_t l2 = L2INDEX(vaddr);
-
-	KASSERT((unsigned long)(ptd->pts[l1] + l2) % PAGE_SIZE == 0);
 
 	return &ptd->pts[l1]->ptes[l2];
 }
@@ -362,8 +376,19 @@ void free_upage(struct addrspace *as, vaddr_t vaddr, bool as_splk) {
 		core_map[i].as = NULL;
 		core_map[i].md.all = 0;
 
-		spinlock_release(&core_map_splk);
+		if(core_map[i].md.s_pres) {
+			spinlock_release(&core_map_splk);
+			spinlock_release(&as->addr_splk);	
+			lock_acquire(swap_lk);
 
+			bitmap_unmark(swap_bitmap, pte->addr);
+
+			lock_release(swap_lk);
+			spinlock_acquire(&as->addr_splk);
+		}
+		else {
+			spinlock_release(&core_map_splk);
+		}
 	}
 	else {
 		spinlock_release(&as->addr_splk);	
@@ -475,6 +500,7 @@ void pth_copy(struct addrspace *old, struct addrspace *new) {
 						spinlock_acquire(&core_map_splk);
 
 						swap_copy_in(old, L12_TO_VADDR(i,j), PTE_TO_CMI(new_pte));
+						core_map[PTE_TO_CMI(new_pte)].md.s_pres = 0;	// can't have two pages reference the same swap
 
 						spinlock_release(&core_map_splk);
 					}
