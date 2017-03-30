@@ -79,6 +79,8 @@
 #define PADDR_TO_CMI(paddr) 		(((paddr) - ((vaddr_t)core_map - MIPS_KSEG0)) / PAGE_SIZE)
 #define CMI_TO_PADDR(cmi)			(((vaddr_t)core_map + (cmi) * PAGE_SIZE) - MIPS_KSEG0)
 #define VADDR_TO_PTE(ptd, vaddr)	(&ptd->pts[L1INDEX(vaddr)]->ptes[L2INDEX(vaddr)])
+#define ADDR_TO_FRAME(addr)			((addr) >> 12)
+#define FRAME_TO_ADDR(frame)		((frame) << 12)
 
 #define ROUND_UP(num, denom)			((((num) - 1) / (denom)) + 1)
 
@@ -155,6 +157,7 @@ paddr_t ram_getfirstfree(void);
 
 struct tlbshootdown {
 	uint32_t oldentryhi;
+	struct addrspace *as;
 };
 
 #define TLBSHOOTDOWN_MAX 16

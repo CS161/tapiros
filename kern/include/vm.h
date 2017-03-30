@@ -72,10 +72,9 @@ struct core_map_entry {
 };
 
 struct core_map_entry *core_map;
-struct bitmap *core_bitmap;
 unsigned long ncmes;
 unsigned long clock;
-struct spinlock core_map_splk;	// protects access to core_map and core_bitmap
+struct spinlock core_map_splk;
 
 struct vnode *swap_vnode;
 struct bitmap *swap_bitmap;
@@ -105,8 +104,10 @@ void free_upages(struct addrspace *as, vaddr_t vaddr, unsigned npages);
 void pth_copy(struct addrspace *old, struct addrspace *new);
 
 /* Swap in/out pages */
-void swap_in(struct addrspace *as, union page_table_entry *pte);
-void swap_out(struct core_map_entry *cme);
+void swap_in(struct addrspace *as, vaddr_t vaddr);
+void swap_copy_in(struct addrspace *as, vaddr_t vaddr, unsigned long cmi);
+void swap_out(unsigned long cmi);
+void swap_copy_out(struct addrspace *as, unsigned long cmi);
 
 /* TLB shootdown handling called from interprocessor_interrupt */
 void vm_tlbshootdown(const struct tlbshootdown *ts);
