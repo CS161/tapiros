@@ -106,7 +106,7 @@ void pth_copy(struct addrspace *old, struct addrspace *new);
 /* Swap in/out pages */
 void swap_in(struct addrspace *as, vaddr_t vaddr);
 void swap_copy_in(struct addrspace *as, vaddr_t vaddr, unsigned long cmi);
-void swap_out(unsigned long cmi);
+void swap_out(unsigned long cmi, struct addrspace *other_as);
 void swap_copy_out(struct addrspace *as, unsigned long cmi);
 
 /* TLB shootdown handling called from interprocessor_interrupt */

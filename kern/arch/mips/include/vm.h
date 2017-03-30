@@ -100,7 +100,7 @@
  */
 #define USERSTACK     	(USERSPACETOP)
 #define USERSTACKBOTTOM	(USERSPACETOP - (1024 * PAGE_SIZE))	// 1024 stack pages allowed
-#define USERHEAPSIZE	(262144 * PAGE_SIZE)	// 1 GiB
+#define USERHEAPSIZE	(2048 * PAGE_SIZE)	// 8 MiB
 
 union page_table_entry {
 	struct {

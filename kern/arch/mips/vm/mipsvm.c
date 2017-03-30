@@ -125,17 +125,20 @@ void swap_copy_out(struct addrspace *as, unsigned long cmi) {
 }
 
 
-// *** Assumes that no spinlocks are held
-// *** CME's busy bit must be set to keep a guarantee that CME is free
-//	   across spinlock boundaries.
+// *** Assumes that a different addrspace spinlock and the core map spinlock are held
 // Move the data at 'cme' to swap and clear the CME / update the PTE.
-void swap_out(unsigned long cmi) {
+void swap_out(unsigned long cmi, struct addrspace *other_as) {
 
 	struct core_map_entry *cme = &core_map[cmi];
 	struct addrspace *as = cme->as;
 
+	cme->md.busy = 1;
+	spinlock_release(&core_map_splk);
+	spinlock_release(&other_as->addr_splk);
+
 	spinlock_acquire(&as->addr_splk);
 	spinlock_acquire(&core_map_splk);
+	cme->md.busy = 0;
 
 	union page_table_entry *pte = VADDR_TO_PTE(cme->as->ptd, cme->va);
 
@@ -147,7 +150,8 @@ void swap_out(unsigned long cmi) {
 		spinlock_acquire(&core_map_splk);
 	}
 
-	swap_copy_out(as, cmi);
+	if(cme->md.dirty || !cme->md.s_pres)
+		swap_copy_out(as, cmi);
 
 	KASSERT(!cme->md.busy);
 	KASSERT(cme->md.s_pres);
@@ -162,6 +166,11 @@ void swap_out(unsigned long cmi) {
 
 	spinlock_release(&core_map_splk);
 	spinlock_release(&as->addr_splk);
+
+	spinlock_acquire(&other_as->addr_splk);
+	spinlock_acquire(&core_map_splk);
+
+	cme->md.busy = 0;
 }
 
 
@@ -228,19 +237,8 @@ void swap_in(struct addrspace *as, vaddr_t vaddr) {
 
 	KASSERT(core_map[cmi].md.kernel == 0);
 
-	if(core_map[cmi].va != 0) {
-		core_map[cmi].md.busy = 1;
-		spinlock_release(&core_map_splk);
-		spinlock_release(&as->addr_splk);
-
-		swap_out(cmi);
-
-		spinlock_acquire(&as->addr_splk);
-		spinlock_acquire(&core_map_splk);
-		core_map[cmi].md.busy = 0;
-
-		wchan_wakeall(as->addr_wchan, &as->addr_splk);
-	}
+	if(core_map[cmi].va != 0)
+		swap_out(cmi, as);
 
 	swap_copy_in(as, vaddr, cmi);
 }
@@ -276,17 +274,7 @@ static long find_cmi(struct addrspace *as) {
 		panic("Out of swappable pages :(\n");
 	}
 
-	core_map[i].md.busy = 1;
-	spinlock_release(&core_map_splk);
-	spinlock_release(&as->addr_splk);
-
-	swap_out(i);
-
-	spinlock_acquire(&as->addr_splk);
-	spinlock_acquire(&core_map_splk);
-	core_map[i].md.busy = 0;
-
-	wchan_wakeall(as->addr_wchan, &as->addr_splk);
+	swap_out(i, as);
 
 	return i;
 }
@@ -321,7 +309,6 @@ int alloc_upage(struct addrspace *as, vaddr_t vaddr, uint8_t perms, bool as_splk
 	KASSERT(core_map[i].md.kernel == 0);
 	core_map[i].va = vaddr;
 	core_map[i].as = as;
-	core_map[i].md.recent = 1;
 	new_pte.p = 1;
 	new_pte.addr = ADDR_TO_FRAME(CMI_TO_PADDR(i));
 	bzero((void *) PADDR_TO_KVADDR(CMI_TO_PADDR(i)), PAGE_SIZE);
@@ -362,6 +349,9 @@ void free_upage(struct addrspace *as, vaddr_t vaddr, bool as_splk) {
 
 			wchan_sleep(as->addr_wchan, &as->addr_splk);
 
+			if(!pte->p)
+				goto swapped;
+
 			spinlock_acquire(&core_map_splk);
 		}
 
@@ -391,6 +381,9 @@ void free_upage(struct addrspace *as, vaddr_t vaddr, bool as_splk) {
 		}
 	}
 	else {
+
+		swapped:
+
 		spinlock_release(&as->addr_splk);	
 		// no other thread will access a pte that's only in swap, 
 		// so we don't need to set the busy bit
@@ -543,6 +536,9 @@ int perms_fault(struct addrspace *as, vaddr_t faultaddress) {
 		wchan_sleep(as->addr_wchan, &as->addr_splk);
 
 		spinlock_acquire(&core_map_splk);
+
+		if(!pte->p)
+			break;
 	}
 
 	if(!pte->p) {
