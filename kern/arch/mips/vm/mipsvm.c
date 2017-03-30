@@ -42,6 +42,17 @@ void swap_bootstrap(void) {
 	}
 
 	clock = 0;
+
+	// TLB shootdown setup
+
+	ts_count = 0;
+
+	spinlock_init(&ts_splk);
+
+	ts_wchan = wchan_create("ts_wchan");
+	if(ts_wchan == NULL) {
+		panic("wchan_create of ts_wchan failed\n");
+	}
 }
 
 
@@ -645,7 +656,16 @@ void invalidate_tlb(void) {
 
 
 void vm_tlbshootdown(const struct tlbshootdown *ts) {
-	(void)ts;
+	int result = tlb_probe(ts->oldentryhi, 0);
+	if(result >= 0)
+		tlb_write(TLBHI_INVALID(result), TLBLO_INVALID(), result);
 
-	panic("Can't vm_tlbshootdown yet!\n");
+	spinlock_acquire(&ts_splk);
+
+	ts_count--;
+	if(ts_count == 0) {
+		wchan_wakeall(ts_wchan, &ts_splk);
+	}
+
+	spinlock_release(&ts_splk);
 }
