@@ -84,9 +84,7 @@ void swap_copy_out(struct addrspace *as, unsigned long cmi) {
 	struct core_map_entry *cme = &core_map[cmi];
 
 	unsigned int swapi; 
-
-	lock_acquire(swap_lk);
-
+	
 	if(!cme->md.s_pres) {
 		int err = bitmap_alloc(swap_bitmap, &swapi);
 		if(err != 0) {
@@ -103,6 +101,8 @@ void swap_copy_out(struct addrspace *as, unsigned long cmi) {
 	spinlock_release(&core_map_splk);
 	spinlock_release(&as->addr_splk);
 
+	lock_acquire(swap_lk);
+
 	struct iovec iov;
 	struct uio uio;
 	uio_kinit(&iov, &uio, (void *) PADDR_TO_KVADDR(CMI_TO_PADDR(cmi)), PAGE_SIZE, swapi * PAGE_SIZE, UIO_WRITE);
@@ -118,6 +118,8 @@ void swap_copy_out(struct addrspace *as, unsigned long cmi) {
 
 	cme->md.busy = 0;
 	cme->md.dirty = 0;
+
+	wchan_wakeall(as->addr_wchan, &as->addr_splk);
 }
 
 
@@ -195,6 +197,8 @@ void swap_copy_in(struct addrspace *as, vaddr_t vaddr, unsigned long cmi) {
 	pte->addr = ADDR_TO_FRAME(CMI_TO_PADDR(cmi));
 	pte->p = 1;
 	pte->b = 0;
+
+	wchan_wakeall(as->addr_wchan, &as->addr_splk);
 }
 
 
@@ -218,6 +222,8 @@ void swap_in(struct addrspace *as, vaddr_t vaddr) {
 		spinlock_acquire(&as->addr_splk);
 		spinlock_acquire(&core_map_splk);
 		core_map[cmi].md.busy = 0;
+
+		wchan_wakeall(as->addr_wchan, &as->addr_splk);
 	}
 
 	swap_copy_in(as, vaddr, cmi);
@@ -265,6 +271,8 @@ static long find_cmi(struct addrspace *as) {
 	spinlock_acquire(&as->addr_splk);
 	spinlock_acquire(&core_map_splk);
 	core_map[i].md.busy = 0;
+
+	wchan_wakeall(as->addr_wchan, &as->addr_splk);
 
 	return i;
 }
@@ -315,6 +323,7 @@ int alloc_upage(struct addrspace *as, vaddr_t vaddr, uint8_t perms, bool as_splk
 }
 
 
+// *** Assumes no spinlocks are held except optionally the address space spinlock
 // 'as_splk' marks whether the address space spinlock is held when calling the function
 void free_upage(struct addrspace *as, vaddr_t vaddr, bool as_splk) {
 	KASSERT(vaddr < USERSPACETOP);
@@ -357,11 +366,17 @@ void free_upage(struct addrspace *as, vaddr_t vaddr, bool as_splk) {
 
 	}
 	else {
+		spinlock_release(&as->addr_splk);	
+		// no other thread will access a pte that's only in swap, 
+		// so we don't need to set the busy bit
+
 		lock_acquire(swap_lk);
 
 		bitmap_unmark(swap_bitmap, pte->addr);
 
 		lock_release(swap_lk);
+
+		spinlock_acquire(&as->addr_splk);
 	}
 
 	pte->all = 0;
@@ -442,7 +457,15 @@ void pth_copy(struct addrspace *old, struct addrspace *new) {
 					new_pte->addr = 0;
 					new_pte->p = 1;
 
-					int err = alloc_upage(new, L12_TO_VADDR(i,j), 1, true);
+					spinlock_release(&old->addr_splk);
+					// If other threads could work in the old address space during the copy,
+					// this would have race conditions, but since we're singlethreaded and only call
+					// as_copy from fork() on the original thread, we're good.
+
+					int err = alloc_upage(new, L12_TO_VADDR(i,j), 1, false);
+
+					spinlock_acquire(&old->addr_splk);
+
 						// use '1' for perms so that any region is valid, not just stack/heap
 						// pretend we hold the spinlock already because we know it's not needed
 					KASSERT(err == 0);
@@ -477,7 +500,7 @@ int perms_fault(struct addrspace *as, vaddr_t faultaddress) {
 	// just in case the page is swapped out after the permissions fault is triggered
 	// but before it's handled
 	while(pte->b)
-			wchan_sleep(as->addr_wchan, &as->addr_splk);
+		wchan_sleep(as->addr_wchan, &as->addr_splk);
 
 	if(!pte->p) {
 		spinlock_release(&as->addr_splk);
