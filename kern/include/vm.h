@@ -44,6 +44,8 @@
 #include <current.h>
 #include <kern/errno.h>
 #include <bitmap.h>
+#include <thread.h>
+#include <mips/tlb.h>
 
 /* Fault-type arguments to vm_fault() */
 #define VM_FAULT_READ        0    /* A read was attempted */
@@ -72,10 +74,9 @@ struct core_map_entry {
 };
 
 struct core_map_entry *core_map;
-struct bitmap *core_bitmap;
 unsigned long ncmes;
 unsigned long clock;
-struct spinlock core_map_splk;	// protects access to core_map and core_bitmap
+struct spinlock core_map_splk;
 
 unsigned shootdown_count;
 struct spinlock sd_lock;
@@ -108,8 +109,10 @@ void free_upages(struct addrspace *as, vaddr_t vaddr, unsigned npages);
 void pth_copy(struct addrspace *old, struct addrspace *new);
 
 /* Swap in/out pages */
-void swap_in(struct addrspace *as, union page_table_entry *pte);
-void swap_out(struct core_map_entry *cme);
+void swap_in(struct addrspace *as, vaddr_t vaddr);
+void swap_copy_in(struct addrspace *as, vaddr_t vaddr, unsigned long cmi);
+void swap_out(unsigned long cmi, struct addrspace *other_as);
+void swap_copy_out(struct addrspace *as, unsigned long cmi);
 
 /* TLB shootdown handling called from interprocessor_interrupt */
 void vm_tlbshootdown(const struct tlbshootdown *ts);

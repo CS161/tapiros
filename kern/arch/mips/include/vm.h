@@ -79,6 +79,8 @@
 #define PADDR_TO_CMI(paddr) 		(((paddr) - ((vaddr_t)core_map - MIPS_KSEG0)) / PAGE_SIZE)
 #define CMI_TO_PADDR(cmi)			(((vaddr_t)core_map + (cmi) * PAGE_SIZE) - MIPS_KSEG0)
 #define VADDR_TO_PTE(ptd, vaddr)	(&ptd->pts[L1INDEX(vaddr)]->ptes[L2INDEX(vaddr)])
+#define ADDR_TO_FRAME(addr)			((addr) >> 12)
+#define FRAME_TO_ADDR(frame)		((frame) << 12)
 
 #define ROUND_UP(num, denom)			((((num) - 1) / (denom)) + 1)
 
@@ -98,7 +100,7 @@
  */
 #define USERSTACK     	(USERSPACETOP)
 #define USERSTACKBOTTOM	(USERSPACETOP - (1024 * PAGE_SIZE))	// 1024 stack pages allowed
-#define USERHEAPSIZE	(262144 * PAGE_SIZE)	// 1 GiB
+#define USERHEAPSIZE	(2048 * PAGE_SIZE)	// 8 MiB
 
 union page_table_entry {
 	struct {
@@ -155,10 +157,18 @@ paddr_t ram_getfirstfree(void);
 
 struct tlbshootdown {
 	uint32_t oldentryhi;
+<<<<<<< HEAD
 	struct addrspace *targetaddress;
 	unsigned shootdown_count;
 	struct spinlock *sd_lock;
+=======
+	struct addrspace *as;
+>>>>>>> b95108ce5277dcf888875c5b2c8147bab837026f
 };
+
+int ts_count;
+struct spinlock ts_splk;
+struct wchan *ts_wchan;
 
 #define TLBSHOOTDOWN_MAX 16
 

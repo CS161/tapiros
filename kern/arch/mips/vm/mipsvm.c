@@ -5,12 +5,12 @@
 #include <vm.h>
 #include <spl.h>
 #include <cpu.h>
-#include <mips/tlb.h>
 #include <addrspace.h>
 #include <wchan.h>
 #include <vfs.h>
 #include <vnode.h>
 #include <kern/stat.h>
+#include <uio.h>
 
 
 void swap_bootstrap(void) {
@@ -25,6 +25,10 @@ void swap_bootstrap(void) {
 		panic("vop_stat on swap_vnode failed with error: %s\n", strerror(err));
 	}
 
+	unsigned long npages = stats.st_size / PAGE_SIZE;
+	if(npages >= (2 << 20))		// swap address is stored in 20 bits (minus one for 0)
+		npages = (2 << 20) - 1;
+
 	swap_bitmap = bitmap_create(stats.st_size / PAGE_SIZE);
 	if(swap_bitmap == NULL) {
 		panic("bitmap_create of swap_bitmap failed\n");
@@ -37,10 +41,21 @@ void swap_bootstrap(void) {
 	}
 
 	clock = 0;
+
+	// TLB shootdown setup
+
+	ts_count = -1;
+
+	spinlock_init(&ts_splk);
+
+	ts_wchan = wchan_create("ts_wchan");
+	if(ts_wchan == NULL) {
+		panic("wchan_create of ts_wchan failed\n");
+	}
 }
 
 
-// *** Assumes the core map spinlock is held
+// *** Assumes the core map spinlock is held (and probably address space too)
 // Returns -1 if there are no pages that can be swapped out (kernel or busy)
 static long choose_page_to_swap(void) {
 	unsigned long nchecked = 0;
@@ -60,7 +75,7 @@ static long choose_page_to_swap(void) {
 	while(nchecked < twice) {			// if there's nothing on the second loop, give up
 		if(clock == ncmes)
 			clock = 0;
-		else if(!core_map[clock].md.kernel && !core_map[clock].md.busy) {	// accept entries in tlb
+		if(!core_map[clock].md.kernel && !core_map[clock].md.busy) {	// accept entries in tlb
 			clock++;
 			return clock - 1;
 		}
@@ -71,26 +86,172 @@ static long choose_page_to_swap(void) {
 }
 
 
-// *** Assumes that [] are held
+// *** Assumes that the address space and core map spinlocks are held
+// Put a copy of data tracked in the core map at 'cmi' into swap 
+// (either at an existing index or a new one) and update the CME accordingly.
+void swap_copy_out(struct addrspace *as, unsigned long cmi) {
+
+	struct core_map_entry *cme = &core_map[cmi];
+
+	KASSERT(cme->md.kernel == 0);
+
+	unsigned int swapi; 
+	
+	if(!cme->md.s_pres) {
+		int err = bitmap_alloc(swap_bitmap, &swapi);
+		if(err != 0) {
+			panic("Out of swap space :(\n");
+		}
+		cme->md.s_pres = 1;
+		cme->md.swap = swapi;
+	}
+	else
+		swapi = cme->md.swap;
+
+	cme->md.busy = 1;
+
+	spinlock_release(&core_map_splk);
+	spinlock_release(&as->addr_splk);
+
+	lock_acquire(swap_lk);
+
+	struct iovec iov;
+	struct uio uio;
+	uio_kinit(&iov, &uio, (void *) PADDR_TO_KVADDR(CMI_TO_PADDR(cmi)), PAGE_SIZE, swapi * PAGE_SIZE, UIO_WRITE);
+
+	int err = VOP_WRITE(swap_vnode, &uio);
+	if(err != 0)
+		panic("Write to swap failed\n");
+
+	lock_release(swap_lk);
+
+	spinlock_acquire(&as->addr_splk);
+	spinlock_acquire(&core_map_splk);
+
+	cme->md.busy = 0;
+	cme->md.dirty = 0;
+
+	wchan_wakeall(as->addr_wchan, &as->addr_splk);
+}
+
+
+// *** Assumes that a different addrspace spinlock and the core map spinlock are held
+// Move the data at 'cme' to swap and clear the CME / update the PTE.
+void swap_out(unsigned long cmi, struct addrspace *other_as) {
+
+	struct core_map_entry *cme = &core_map[cmi];
+	struct addrspace *as = cme->as;
+
+	cme->md.busy = 1;
+	spinlock_release(&core_map_splk);
+	spinlock_release(&other_as->addr_splk);
+
+	spinlock_acquire(&as->addr_splk);
+	spinlock_acquire(&core_map_splk);
+	cme->md.busy = 0;
+
+	union page_table_entry *pte = VADDR_TO_PTE(cme->as->ptd, cme->va);
+
+	while(pte->b) {
+		spinlock_release(&core_map_splk);
+
+		wchan_sleep(as->addr_wchan, &as->addr_splk);
+
+		spinlock_acquire(&core_map_splk);
+	}
+
+	if(cme->md.dirty || !cme->md.s_pres) {
+		swap_copy_out(as, cmi);
+	}
+
+	KASSERT(!cme->md.busy);
+	KASSERT(cme->md.s_pres);
+
+	pte->p = 0;
+	pte->addr = cme->md.swap;
+
+	cme->va = 0;
+	cme->as = 0;
+	cme->md.all = 0;
+	cme->md.busy = 1;
+
+	spinlock_release(&core_map_splk);
+	spinlock_release(&as->addr_splk);
+
+	spinlock_acquire(&other_as->addr_splk);
+	spinlock_acquire(&core_map_splk);
+
+	cme->md.busy = 0;
+}
+
+
+// *** Assumes that the address space and core map spinlocks are held
+// Copy the data tracked by 'pte' in swap into the page referenced by 'cme'
+void swap_copy_in(struct addrspace *as, vaddr_t vaddr, unsigned long cmi) {
+
+	union page_table_entry *pte = VADDR_TO_PTE(as->ptd, vaddr);
+	struct core_map_entry *cme = &core_map[cmi];
+
+	KASSERT(cme->md.kernel == 0);
+
+	KASSERT(pte->p != 1);
+	KASSERT(pte->addr != 0);
+
+	cme->md.busy = 1;
+	pte->b = 1;
+
+	spinlock_release(&core_map_splk);
+	spinlock_release(&as->addr_splk);
+
+	lock_acquire(swap_lk);
+
+	if(pte->addr > 2000) {
+		kprintf("Weird");
+	}
+
+	struct iovec iov;
+	struct uio uio;
+	uio_kinit(&iov, &uio, (void *) PADDR_TO_KVADDR(CMI_TO_PADDR(cmi)), PAGE_SIZE, pte->addr * PAGE_SIZE, UIO_READ);
+
+	int err = VOP_READ(swap_vnode, &uio);
+	if(err != 0)
+		panic("Read from swap failed\n");
+
+	lock_release(swap_lk);
+
+	spinlock_acquire(&as->addr_splk);
+	spinlock_acquire(&core_map_splk);
+
+	cme->va = vaddr;
+	cme->as = as;
+	cme->md.all = 0;	// also sets busy to 0
+	cme->md.swap = pte->addr;
+	cme->md.s_pres = 1;
+
+	pte->addr = ADDR_TO_FRAME(CMI_TO_PADDR(cmi));
+	pte->p = 1;
+	pte->b = 0;
+
+	wchan_wakeall(as->addr_wchan, &as->addr_splk);
+}
+
+
+// *** Assumes that the address space and core map spinlocks are held
 // Move the data tracked by 'pte' in swap into memory.
 // (Swap a page out first if there are no free core map entries.)
-void swap_in(struct addrspace *as, union page_table_entry *pte) {
-	(void)as;
-	(void)pte;
+void swap_in(struct addrspace *as, vaddr_t vaddr) {
+
 	long cmi = choose_page_to_swap();
 	if(cmi == -1) {
 		panic("Out of pages to swap :(\n");
 	}
 
-	return;
-}
+	KASSERT(core_map[cmi].md.kernel == 0);
 
+	if(core_map[cmi].va != 0)
+		swap_out(cmi, as);
 
-// *** Assumes that no spinlocks are held
-// Make a copy of data at 'cmi' in swap, and update the PTE/CME appropriately.
-void swap_out(struct core_map_entry *cme) {
-	(void)cme;
-	return;
+	swap_copy_in(as, vaddr, cmi);
 }
 
 
@@ -107,9 +268,26 @@ static union page_table_entry* get_pte(struct page_table_directory *ptd, vaddr_t
 
 	vaddr_t l2 = L2INDEX(vaddr);
 
-	KASSERT((unsigned long)(ptd->pts[l1] + l2) % PAGE_SIZE == 0);
-
 	return &ptd->pts[l1]->ptes[l2];
+}
+
+
+// *** Assumes the address space and core map spinlocks are held
+static long find_cmi(struct addrspace *as) {
+	long i;
+	for(i = 0; i < (long) ncmes; i++) {
+		if(!core_map[i].md.busy && core_map[i].va == 0)
+			return i;
+	}
+
+	i = choose_page_to_swap();
+	if(i < 0) {
+		panic("Out of swappable pages :(\n");
+	}
+
+	swap_out(i, as);
+
+	return i;
 }
 
 
@@ -137,24 +315,15 @@ int alloc_upage(struct addrspace *as, vaddr_t vaddr, uint8_t perms, bool as_splk
 
 	spinlock_acquire(&core_map_splk);
 
-	unsigned long i;
-	for(i = 0; i < ncmes; i++) {
-		if(!core_map[i].md.busy && core_map[i].va == 0) {
-			KASSERT(core_map[i].md.kernel == 0);
-			core_map[i].va = vaddr;
-			core_map[i].as = as;
-			core_map[i].md.recent = 1;
-			new_pte.p = 1;
-			new_pte.addr = CMI_TO_PADDR(i) >> 12;
-			bzero((void *) PADDR_TO_KVADDR(CMI_TO_PADDR(i)), PAGE_SIZE);
-			*pte = new_pte;
-			break;
-		}
-	}
-	if(i == ncmes) {
-		panic("Out of memory :(\n");
-		// ***handle swap out then allocation
-	}
+	long i = find_cmi(as);
+
+	KASSERT(core_map[i].md.kernel == 0);
+	core_map[i].va = vaddr;
+	core_map[i].as = as;
+	new_pte.p = 1;
+	new_pte.addr = ADDR_TO_FRAME(CMI_TO_PADDR(i));
+	bzero((void *) PADDR_TO_KVADDR(CMI_TO_PADDR(i)), PAGE_SIZE);
+	*pte = new_pte;
 
 	KASSERT(pte->addr != 0);
 
@@ -166,6 +335,7 @@ int alloc_upage(struct addrspace *as, vaddr_t vaddr, uint8_t perms, bool as_splk
 }
 
 
+// *** Assumes no spinlocks are held except optionally the address space spinlock
 // 'as_splk' marks whether the address space spinlock is held when calling the function
 void free_upage(struct addrspace *as, vaddr_t vaddr, bool as_splk) {
 	KASSERT(vaddr < USERSPACETOP);
@@ -176,33 +346,69 @@ void free_upage(struct addrspace *as, vaddr_t vaddr, bool as_splk) {
 	union page_table_entry *pte = VADDR_TO_PTE(as->ptd, vaddr);
 	KASSERT(pte->addr != 0);
 
-	unsigned long i = PTE_TO_CMI(pte);
-
-	spinlock_acquire(&core_map_splk);
-
-	while(core_map[i].md.busy) {	// wait until the physical page isn't busy
-		spinlock_release(&core_map_splk);
-
+	while(pte->b)
 		wchan_sleep(as->addr_wchan, &as->addr_splk);
 
+	if(pte->p) {
+
+		unsigned long i = PTE_TO_CMI(pte);
+
 		spinlock_acquire(&core_map_splk);
+
+		while(core_map[i].md.busy) {	// wait until the physical page isn't busy
+			spinlock_release(&core_map_splk);
+
+			wchan_sleep(as->addr_wchan, &as->addr_splk);
+
+			if(!pte->p)
+				goto swapped;
+
+			spinlock_acquire(&core_map_splk);
+		}
+
+		KASSERT(core_map[i].va != 0);
+		KASSERT(core_map[i].as == as);
+		KASSERT(core_map[i].md.kernel == 0);
+		KASSERT(core_map[i].md.busy == 0);
+		KASSERT(pte->b == 0);
+
+		// ***will need to handle tlb shootdowns here
+		core_map[i].va = 0;
+		core_map[i].as = NULL;
+		core_map[i].md.all = 0;
+
+		if(core_map[i].md.s_pres) {
+			spinlock_release(&core_map_splk);
+			spinlock_release(&as->addr_splk);	
+			lock_acquire(swap_lk);
+
+			bitmap_unmark(swap_bitmap, pte->addr);
+
+			lock_release(swap_lk);
+			spinlock_acquire(&as->addr_splk);
+		}
+		else {
+			spinlock_release(&core_map_splk);
+		}
+	}
+	else {
+
+		swapped:
+
+		spinlock_release(&as->addr_splk);	
+		// no other thread will access a pte that's only in swap, 
+		// so we don't need to set the busy bit
+
+		lock_acquire(swap_lk);
+
+		bitmap_unmark(swap_bitmap, pte->addr);
+
+		lock_release(swap_lk);
+
+		spinlock_acquire(&as->addr_splk);
 	}
 
-	KASSERT(core_map[i].va != 0);
-	KASSERT(core_map[i].as == as);
-	KASSERT(core_map[i].md.kernel == 0);
-	KASSERT(core_map[i].md.busy == 0);
-	KASSERT(pte->b == 0);
-	// pte->b should be 1 a subset of the time core_map[i].md.busy is 1
-
-	// ***will need to handle tlb shootdowns and pages in swap
-	core_map[i].va = 0;
-	core_map[i].as = NULL;
-	core_map[i].md.all = 0;
-
 	pte->all = 0;
-
-	spinlock_release(&core_map_splk);
 
 	if(!as_splk)
 		spinlock_release(&as->addr_splk);
@@ -280,17 +486,31 @@ void pth_copy(struct addrspace *old, struct addrspace *new) {
 					new_pte->addr = 0;
 					new_pte->p = 1;
 
-					int err = alloc_upage(new, L12_TO_VADDR(i,j), 1, true);
+					spinlock_release(&old->addr_splk);
+					// If other threads could work in the old address space during the copy,
+					// this would have race conditions, but since we're singlethreaded and only call
+					// as_copy from fork() on the original thread, we're good.
+
+					int err = alloc_upage(new, L12_TO_VADDR(i,j), 1, false);
+
+					spinlock_acquire(&old->addr_splk);
+
 						// use '1' for perms so that any region is valid, not just stack/heap
 						// pretend we hold the spinlock already because we know it's not needed
 					KASSERT(err == 0);
 
 					if(!old_pte->p) {
 						// read from swap into the new page
+						spinlock_acquire(&core_map_splk);
+
+						swap_copy_in(old, L12_TO_VADDR(i,j), PTE_TO_CMI(new_pte));
+						core_map[PTE_TO_CMI(new_pte)].md.s_pres = 0;	// can't have two pages reference the same swap
+
+						spinlock_release(&core_map_splk);
 					}
 					else {
-						memcpy((void *) PADDR_TO_KVADDR(new_pte->addr << 12), 
-								(void *) PADDR_TO_KVADDR(old_pte->addr << 12), 
+						memcpy((void *) PADDR_TO_KVADDR(FRAME_TO_ADDR(new_pte->addr)), 
+								(void *) PADDR_TO_KVADDR(FRAME_TO_ADDR(old_pte->addr)), 
 								PAGE_SIZE);
 					}
 				}
@@ -307,18 +527,35 @@ int perms_fault(struct addrspace *as, vaddr_t faultaddress) {
 
 	union page_table_entry *pte = VADDR_TO_PTE(as->ptd, faultaddress);
 
+	// just in case the page is swapped out after the permissions fault is triggered
+	// but before it's handled
+	while(pte->b)
+		wchan_sleep(as->addr_wchan, &as->addr_splk);
+
+	if(!pte->p) {
+		spinlock_release(&as->addr_splk);
+		return 0;	// succeed so that the user program will fault again with a TLB miss
+	}
+
 	unsigned long i = PTE_TO_CMI(pte);
 
 	spinlock_acquire(&core_map_splk);
 
-	// *** need to think about the possibility of swap happening after this fault starts
-
-	while(core_map[i].md.busy) {	// wait until the physical page isn't busy
+	while(core_map[i].md.busy) {
 		spinlock_release(&core_map_splk);
 
 		wchan_sleep(as->addr_wchan, &as->addr_splk);
 
 		spinlock_acquire(&core_map_splk);
+
+		if(!pte->p)
+			break;
+	}
+
+	if(!pte->p) {
+		spinlock_release(&core_map_splk);
+		spinlock_release(&as->addr_splk);
+		return 0;	// succeed so that the user program will fault again with a TLB miss
 	}
 
 	core_map[i].md.dirty = 1;
@@ -388,12 +625,10 @@ int tlb_miss(struct addrspace *as, vaddr_t faultaddress) {
 	while(pte->b)
 		wchan_sleep(as->addr_wchan, &as->addr_splk);
 
-	if(!pte->p) {
-		// swap stuff goes here
-		panic("tlb_miss: !pte_p shouldn't be possible without swap\n");
-	}
-
 	spinlock_acquire(&core_map_splk);
+
+	if(!pte->p)
+		swap_in(as, faultaddress);
 
 	unsigned long cmi = PTE_TO_CMI(pte);
 	core_map[cmi].md.tlb = 1;
@@ -401,7 +636,7 @@ int tlb_miss(struct addrspace *as, vaddr_t faultaddress) {
 	uint32_t newentryhi = 0, newentrylo = 0;
 
 	newentryhi = faultaddress & TLBHI_VPAGE;
-	newentrylo = (pte->addr << 12 & TLBLO_PPAGE) | TLBLO_VALID;
+	newentrylo = (FRAME_TO_ADDR(pte->addr) & TLBLO_PPAGE) | TLBLO_VALID;
 	// write permissions aren't set so we can track the dirty bit
 
 	unsigned long tlbi = choose_tlb_entry();
@@ -431,4 +666,21 @@ void vm_tlbshootdown(const struct tlbshootdown *ts){
 	}
 	spinlock_release(ts->sd_lock);
 
+<<<<<<< HEAD
 }
+=======
+void vm_tlbshootdown(const struct tlbshootdown *ts) {
+	int result = tlb_probe(ts->oldentryhi, 0);
+	if(result >= 0)
+		tlb_write(TLBHI_INVALID(result), TLBLO_INVALID(), result);
+
+	spinlock_acquire(&ts_splk);
+
+	ts_count--;
+	if(ts_count == 0) {
+		wchan_wakeall(ts_wchan, &ts_splk);
+	}
+
+	spinlock_release(&ts_splk);
+}
+>>>>>>> b95108ce5277dcf888875c5b2c8147bab837026f

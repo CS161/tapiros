@@ -1223,7 +1223,7 @@ ipi_broadcast(int code)
 /*
  * Send a TLB shootdown IPI to the specified CPU.
  */
-void
+static void
 ipi_tlbshootdown(struct cpu *target, const struct tlbshootdown *mapping)
 {
 	unsigned n;
@@ -1255,6 +1255,49 @@ ipi_tlbshootdown(struct cpu *target, const struct tlbshootdown *mapping)
 }
 
 /*
+<<<<<<< HEAD
+=======
+ * Send a TLB shootdown IPI to all CPUs.
+ */
+void
+ipi_broadcast_tlbshootdown(uint32_t oldentryhi, struct addrspace *as)
+{
+	spinlock_acquire(&ts_splk);
+
+	struct tlbshootdown ts;
+	ts.oldentryhi = oldentryhi;
+	ts.as = as;
+
+	while(ts_count != -1) {
+		wchan_sleep(ts_wchan, &ts_splk);
+	}
+
+	unsigned i;
+	struct cpu *c;
+	unsigned num = cpuarray_num(&allcpus);
+
+	ts_count = num;
+
+	for (i=0; i < num; i++) {
+		c = cpuarray_get(&allcpus, i);
+		if (c != curcpu->c_self) {
+			ipi_tlbshootdown(c, &ts);
+		}
+	}
+
+	while(ts_count != 0) {
+		wchan_sleep(ts_wchan, &ts_splk);
+	}
+
+	ts_count = -1;
+
+	wchan_wakeall(ts_wchan, &ts_splk);
+
+	spinlock_release(&ts_splk);
+}
+
+/*
+>>>>>>> b95108ce5277dcf888875c5b2c8147bab837026f
  * Handle an incoming interprocessor interrupt.
  */
 void
