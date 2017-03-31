@@ -156,6 +156,18 @@ vaddr_t alloc_kpages(unsigned npages) {
 
 	// ***need to add handling tlb shootdown and swapping
 	for(j = starts[i]; j < starts[i] + lengths[i]; j++) {
+		if(core_map[j].va != 0) {
+			spinlock_release(&core_map_splk);
+
+			struct addrspace *other_as = core_map[j].as;
+
+			spinlock_acquire(&other_as->addr_splk);
+			spinlock_acquire(&core_map_splk);
+
+			swap_out(j, other_as);
+
+			spinlock_release(&other_as->addr_splk);
+		}
 		core_map[j].va = ((vaddr_t) core_map) + j * PAGE_SIZE;
 		core_map[j].md.kernel = 1;
 		KASSERT(core_map[j].md.contig == 0);

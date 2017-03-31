@@ -44,6 +44,8 @@
 #include <current.h>
 #include <kern/errno.h>
 #include <bitmap.h>
+#include <thread.h>
+#include <mips/tlb.h>
 
 /* Fault-type arguments to vm_fault() */
 #define VM_FAULT_READ        0    /* A read was attempted */

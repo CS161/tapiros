@@ -5,7 +5,6 @@
 #include <vm.h>
 #include <spl.h>
 #include <cpu.h>
-#include <mips/tlb.h>
 #include <addrspace.h>
 #include <wchan.h>
 #include <vfs.h>
@@ -161,8 +160,9 @@ void swap_out(unsigned long cmi, struct addrspace *other_as) {
 		spinlock_acquire(&core_map_splk);
 	}
 
-	if(cme->md.dirty || !cme->md.s_pres)
+	if(cme->md.dirty || !cme->md.s_pres) {
 		swap_copy_out(as, cmi);
+	}
 
 	KASSERT(!cme->md.busy);
 	KASSERT(cme->md.s_pres);
