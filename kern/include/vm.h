@@ -67,10 +67,12 @@ union metadata {
 };
 
 struct core_map_entry {
-	vaddr_t va;
-	struct addrspace *as;
-	uint32_t reserved;		// reserved for future use to make nicely aligned 16 byte entries
-	union metadata md;		// 4 bytes
+	vaddr_t va;				// virtual address of the page
+	struct addrspace *as;	// address space for the virtual address
+	uint32_t reserved;		// reserved to make nicely aligned 16 byte entries
+							// could put other stuff here, like a refcount if you
+							// implemented copy on write
+	union metadata md;		// 4 bytes of metadata
 };
 
 struct core_map_entry *core_map;

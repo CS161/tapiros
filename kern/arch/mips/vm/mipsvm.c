@@ -323,6 +323,9 @@ static union page_table_entry* get_pte(struct addrspace *as, vaddr_t vaddr, bool
 		// so we can let go of the spinlock without causing problems
 
 		ptd->pts[l1] = kmalloc(sizeof(struct page_table));
+		if(ptd->pts[l1] == NULL) {
+			panic("kmalloc failed\n");
+		}
 
 		if(as_splk)
 			spinlock_acquire(&as->addr_splk);
@@ -572,7 +575,6 @@ void pth_copy(struct addrspace *old, struct addrspace *new) {
 
 					spinlock_release(&old->addr_splk);
 					union page_table_entry *new_pte = get_pte(new, L12_TO_VADDR(i,j), false);
-
 					spinlock_acquire(&old->addr_splk);
 
 					new_pte->addr = 0;
@@ -581,6 +583,7 @@ void pth_copy(struct addrspace *old, struct addrspace *new) {
 					spinlock_release(&old->addr_splk);
 
 					int err = alloc_upage(new, L12_TO_VADDR(i,j), 1, false);
+					// use '1' for perms so that any region is valid, not just stack/heap
 
 					spinlock_acquire(&old->addr_splk);
 					spinlock_acquire(&new->addr_splk);	// nothing will acquire new then old, so this won't deadlock
@@ -591,16 +594,44 @@ void pth_copy(struct addrspace *old, struct addrspace *new) {
 
 					spinlock_release(&new->addr_splk);
 
-						// use '1' for perms so that any region is valid, not just stack/heap
-						// pretend we hold the spinlock already because we know it's not needed
 					KASSERT(err == 0);
 
-					if(!old_pte->p) {
-						// read from swap into the new page
-						
-						swap_copy_in(old, L12_TO_VADDR(i,j), PTE_TO_CMI(new_pte));
-						core_map[PTE_TO_CMI(new_pte)].md.s_pres = 0;	// can't have two pages reference the same swap
+					if(!old_pte->p) {	// read from swap into the new page
+					
+						struct core_map_entry *cme = &core_map[PTE_TO_CMI(new_pte)];
 
+						cme->md.busy = 1;
+						old_pte->b = 1;
+
+						spinlock_release(&core_map_splk);
+						spinlock_release(&old->addr_splk);
+
+						lock_acquire(swap_lk);
+
+						struct iovec iov;
+						struct uio uio;
+						uio_kinit(&iov, &uio, (void *) PADDR_TO_KVADDR(CMI_TO_PADDR(PTE_TO_CMI(new_pte))), PAGE_SIZE, old_pte->addr * PAGE_SIZE, UIO_READ);
+
+						int err = VOP_READ(swap_vnode, &uio);
+						if(err != 0)
+							panic("Read from swap failed\n");
+
+						lock_release(swap_lk);
+
+						spinlock_acquire(&old->addr_splk);
+						spinlock_acquire(&new->addr_splk);
+						spinlock_acquire(&core_map_splk);
+
+						KASSERT(cme->md.busy == 1);
+						KASSERT(old_pte->b == 1);
+
+						cme->md.busy = 0;
+						old_pte->b = 0;
+						
+						wchan_wakeall(old->addr_wchan, &old->addr_splk);
+						wchan_wakeall(new->addr_wchan, &new->addr_splk);
+
+						spinlock_release(&new->addr_splk);
 					}
 					else {
 						KASSERT(core_map[PTE_TO_CMI(new_pte)].md.busy == 0);
