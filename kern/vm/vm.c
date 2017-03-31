@@ -162,13 +162,12 @@ vaddr_t alloc_kpages(unsigned npages) {
 		}
 	}
 	if(i == 3) {
-		panic("alloc_kpages couldn't find enough free memory. SAD!\n");
+		return 0;
 	}
 
 	vaddr_t ret = ((vaddr_t) core_map) + (starts[i] * PAGE_SIZE);
 	unsigned long j;
 
-	// ***need to add handling tlb shootdown and swapping
 	for(j = starts[i]; j < starts[i] + lengths[i]; j++) {
 		if(core_map[j].va != 0) {
 			spinlock_release(&core_map_splk);
@@ -184,12 +183,17 @@ vaddr_t alloc_kpages(unsigned npages) {
 				spinlock_acquire(&core_map_splk);
 			}
 
-			swap_out(j, other_as);
+			swap_out(j, other_as); // this signals the wait channel
 
 			spinlock_release(&other_as->addr_splk);
 		}
+		KASSERT(core_map[j].va == 0);
+		KASSERT(core_map[j].md.kernel == 0);
+		KASSERT(core_map[j].as == NULL);
+
 		core_map[j].va = ((vaddr_t) core_map) + j * PAGE_SIZE;
 		core_map[j].md.kernel = 1;
+
 		KASSERT(core_map[j].md.contig == 0);
 	}
 	core_map[j-1].md.contig = 1;
