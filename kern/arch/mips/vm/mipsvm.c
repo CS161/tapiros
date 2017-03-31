@@ -75,7 +75,18 @@ static long choose_page_to_swap(void) {
 	while(nchecked < twice) {			// if there's nothing on the second loop, give up
 		if(clock == ncmes)
 			clock = 0;
-		if(!core_map[clock].md.kernel && !core_map[clock].md.busy) {	// accept entries in tlb
+		if(!core_map[clock].md.kernel && !core_map[clock].md.busy && !core_map[clock].md.tlb) {	// no more recent entries
+			clock++;
+			return clock - 1;
+		}
+		clock++;
+		nchecked++;
+	}
+	unsigned long thrice = 3 * ncmes;	// 2 * ncmes shouldn't be calculated each iteration
+	while(nchecked < thrice) {			// if there's nothing on the second loop, give up
+		if(clock == ncmes)
+			clock = 0;
+		if(!core_map[clock].md.kernel && !core_map[clock].md.busy) {	// accept TLB entries
 			clock++;
 			return clock - 1;
 		}
@@ -137,6 +148,8 @@ void swap_out(unsigned long cmi, struct addrspace *other_as) {
 
 	struct core_map_entry *cme = &core_map[cmi];
 	struct addrspace *as = cme->as;
+
+	KASSERT(cme->md.busy == 0);
 
 	cme->md.busy = 1;
 	spinlock_release(&core_map_splk);
@@ -217,10 +230,6 @@ void swap_copy_in(struct addrspace *as, vaddr_t vaddr, unsigned long cmi) {
 
 	lock_acquire(swap_lk);
 
-	if(pte->addr > 2000) {
-		kprintf("Weird");
-	}
-
 	struct iovec iov;
 	struct uio uio;
 	uio_kinit(&iov, &uio, (void *) PADDR_TO_KVADDR(CMI_TO_PADDR(cmi)), PAGE_SIZE, pte->addr * PAGE_SIZE, UIO_READ);
@@ -259,6 +268,7 @@ void swap_in(struct addrspace *as, vaddr_t vaddr) {
 	}
 
 	KASSERT(core_map[cmi].md.kernel == 0);
+	KASSERT(core_map[cmi].md.busy == 0);
 
 	if(core_map[cmi].va != 0)
 		swap_out(cmi, as);

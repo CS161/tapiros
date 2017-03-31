@@ -4,6 +4,7 @@
 
 #include <vm.h>
 #include <addrspace.h>
+#include <wchan.h>
 
 
 // It's relevant to note that our core map starts at the core map's page;
@@ -39,7 +40,7 @@ int print_core_map(int nargs, char **args) {
 			nkernel++;
 		else if(cme.va)
 			nuser++;
-		kprintf("%lu: vaddr: %p, as: %p, c:%d\n", i, (void *) cme.va, cme.as, cme.md.contig);
+		kprintf("%lu: vaddr: %p, as: %p, c:%d, b:%d\n", i, (void *) cme.va, cme.as, cme.md.contig, cme.md.busy);
 	}
 	kprintf("\nKernel Pages: %lu\nUser Pages: %lu\nTotal Pages: %lu\n\n", nkernel, nuser, nkernel + nuser);
 	return 0;
@@ -164,6 +165,12 @@ vaddr_t alloc_kpages(unsigned npages) {
 
 			spinlock_acquire(&other_as->addr_splk);
 			spinlock_acquire(&core_map_splk);
+
+			while(core_map[j].md.busy) {
+				spinlock_release(&core_map_splk);
+				wchan_sleep(other_as->addr_wchan, &other_as->addr_splk);
+				spinlock_acquire(&core_map_splk);
+			}
 
 			swap_out(j, other_as);
 
