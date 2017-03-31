@@ -5,6 +5,7 @@
 #include <vm.h>
 #include <addrspace.h>
 #include <wchan.h>
+#include <bitmap.h>
 
 
 // It's relevant to note that our core map starts at the core map's page;
@@ -43,6 +44,17 @@ int print_core_map(int nargs, char **args) {
 		kprintf("%lu: vaddr: %p, as: %p, c:%d, b:%d\n", i, (void *) cme.va, cme.as, cme.md.contig, cme.md.busy);
 	}
 	kprintf("\nKernel Pages: %lu\nUser Pages: %lu\nTotal Pages: %lu\n\n", nkernel, nuser, nkernel + nuser);
+
+	unsigned int i;
+	for(i = 1; i < nswap; i++) {
+		if(bitmap_isset(swap_bitmap, i)) {
+			kprintf("Swap isn't properly zeroed.\n");
+			break;
+		}
+	}
+	if(i == nswap)
+		kprintf("Swap is properly zeroed.\n");
+
 	return 0;
 }
 

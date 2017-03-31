@@ -52,8 +52,6 @@
 #define VM_FAULT_WRITE       1    /* A write was attempted */
 #define VM_FAULT_READONLY    2    /* A write to a readonly page was attempted*/
 
-#define ROUND_UP(num, denom)			((((num) - 1) / (denom)) + 1)
-
 union metadata {
 	struct {
 		unsigned int swap : 20, : 5;	// address in swap
@@ -83,6 +81,7 @@ struct spinlock core_map_splk;
 struct vnode *swap_vnode;
 struct bitmap *swap_bitmap;
 struct lock *swap_lk;	// protects access to swap_bitmap and swap_vnode
+unsigned long nswap;
 
 /* Initialization function */
 void vm_bootstrap(void);

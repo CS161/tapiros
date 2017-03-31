@@ -25,11 +25,11 @@ void swap_bootstrap(void) {
 		panic("vop_stat on swap_vnode failed with error: %s\n", strerror(err));
 	}
 
-	unsigned long npages = stats.st_size / PAGE_SIZE;
-	if(npages >= (2 << 20))		// swap address is stored in 20 bits (minus one for 0)
-		npages = (2 << 20) - 1;
+	nswap = stats.st_size / PAGE_SIZE;
+	if(nswap >= (2 << 20))		// swap address is stored in 20 bits (minus one for 0)
+		nswap = (2 << 20) - 1;
 
-	swap_bitmap = bitmap_create(stats.st_size / PAGE_SIZE);
+	swap_bitmap = bitmap_create(nswap);
 	if(swap_bitmap == NULL) {
 		panic("bitmap_create of swap_bitmap failed\n");
 	}
