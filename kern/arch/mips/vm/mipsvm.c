@@ -174,7 +174,7 @@ void swap_out(unsigned long cmi, struct addrspace *other_as) {
 		spinlock_acquire(&core_map_splk);
 	}
 
-	KASSERT(pte->p == 0);
+	KASSERT(pte->p == 1);
 
 	pte->b = 1;
 
