@@ -89,7 +89,7 @@ int vm_fault(int faulttype, vaddr_t faultaddress) {
 
 
 // alloc_kpages is more readable with this, and macros don't incur overhead from function calls 
-// (though that might be compiled out)
+// (though that might be compiled out with inlining)
 
 #define TERMINATE_CHAIN(n)				\
 	if(candidates[n] > lengths[n]) {	\
@@ -99,7 +99,8 @@ int vm_fault(int faulttype, vaddr_t faultaddress) {
 	candidates[n] = 0;					\
 
 
-// ***Does not guarantee zero-filled pages
+// *** Does not guarantee zero-filled pages
+// *** Assumes no spinlocks are held
 vaddr_t alloc_kpages(unsigned npages) {
 
 	/*
@@ -169,6 +170,14 @@ vaddr_t alloc_kpages(unsigned npages) {
 	unsigned long j;
 
 	for(j = starts[i]; j < starts[i] + lengths[i]; j++) {
+		KASSERT(core_map[j].md.busy == 0);
+		core_map[j].md.busy = 1;	// protect the pages we've chosen so another thread
+									// won't swoop in and take them from under us
+									// (especially bad if it's another alloc_kpages, because then
+									// our contiguous chain has an unswappable block in the middle)
+	}
+
+	for(j = starts[i]; j < starts[i] + lengths[i]; j++) {
 		if(core_map[j].va != 0) {
 			spinlock_release(&core_map_splk);
 
@@ -177,22 +186,24 @@ vaddr_t alloc_kpages(unsigned npages) {
 			spinlock_acquire(&other_as->addr_splk);
 			spinlock_acquire(&core_map_splk);
 
-			while(core_map[j].md.busy) {
-				spinlock_release(&core_map_splk);
-				wchan_sleep(other_as->addr_wchan, &other_as->addr_splk);
-				spinlock_acquire(&core_map_splk);
-			}
+			KASSERT(core_map[j].md.busy == 1);
 
-			swap_out(j, other_as); // this signals the wait channel
+			core_map[j].md.busy = 0;
+			wchan_wakeall(core_map[j].as->addr_wchan, &core_map[j].as->addr_splk);
+
+			swap_out(j, other_as);
+			core_map[j].md.busy = 1;
 
 			spinlock_release(&other_as->addr_splk);
 		}
 		KASSERT(core_map[j].va == 0);
 		KASSERT(core_map[j].md.kernel == 0);
 		KASSERT(core_map[j].as == NULL);
+		KASSERT(core_map[j].md.busy == 1);
 
 		core_map[j].va = ((vaddr_t) core_map) + j * PAGE_SIZE;
 		core_map[j].md.kernel = 1;
+		core_map[j].md.busy = 0;
 
 		KASSERT(core_map[j].md.contig == 0);
 	}

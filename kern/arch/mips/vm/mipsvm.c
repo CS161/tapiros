@@ -174,6 +174,10 @@ void swap_out(unsigned long cmi, struct addrspace *other_as) {
 		spinlock_acquire(&core_map_splk);
 	}
 
+	KASSERT(pte->p == 0);
+
+	pte->b = 1;
+
 	if(cme->md.tlb) {
 		spinlock_release(&core_map_splk);
 		spinlock_release(&as->addr_splk);
@@ -191,9 +195,12 @@ void swap_out(unsigned long cmi, struct addrspace *other_as) {
 		swap_copy_out(as, cmi);
 	}
 
+	KASSERT(cme->va != 0);
+	KASSERT(cme->as != 0);
 	KASSERT(cme->md.s_pres);
 
 	pte->p = 0;
+	pte->b = 0;
 	pte->addr = cme->md.swap;
 
 	wchan_wakeall(as->addr_wchan, &as->addr_splk);
@@ -212,6 +219,8 @@ void swap_out(unsigned long cmi, struct addrspace *other_as) {
 
 	spinlock_acquire(&other_as->addr_splk);
 	spinlock_acquire(&core_map_splk);
+
+	KASSERT(cme->md.busy == 1);
 
 	cme->md.busy = 0;
 	// no one can be waiting on this because it
@@ -255,6 +264,9 @@ void swap_copy_in(struct addrspace *as, vaddr_t vaddr, unsigned long cmi) {
 	spinlock_acquire(&as->addr_splk);
 	spinlock_acquire(&core_map_splk);
 
+	KASSERT(cme->md.busy == 1);
+	KASSERT(pte->b == 1);
+
 	cme->va = vaddr;
 	cme->as = as;
 	cme->md.all = 0;	// also sets busy to 0
@@ -287,6 +299,7 @@ void swap_in(struct addrspace *as, vaddr_t vaddr) {
 	if(core_map[cmi].va != 0)
 		swap_out(cmi, as);
 
+	KASSERT(core_map[cmi].md.busy == 0);
 	KASSERT(core_map[cmi].va == 0);
 	KASSERT(core_map[cmi].md.kernel == 0);
 	KASSERT(core_map[cmi].as == NULL);
@@ -338,6 +351,11 @@ static long find_cmi(struct addrspace *as) {
 
 	swap_out(i, as);
 
+	KASSERT(core_map[i].md.busy == 0);
+	KASSERT(core_map[i].va == 0);
+	KASSERT(core_map[i].as == NULL);
+	KASSERT(core_map[i].md.kernel == 0);
+
 	return i;
 }
 
@@ -370,7 +388,11 @@ int alloc_upage(struct addrspace *as, vaddr_t vaddr, uint8_t perms, bool as_splk
 
 	long i = find_cmi(as);
 
+	KASSERT(core_map[i].md.busy == 0);
 	KASSERT(core_map[i].md.kernel == 0);
+	KASSERT(core_map[i].va == 0);
+	KASSERT(core_map[i].as == 0);
+
 	core_map[i].va = vaddr;
 	core_map[i].as = as;
 	core_map[i].md.all = 0;
