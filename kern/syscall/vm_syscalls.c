@@ -36,7 +36,7 @@ int sys_sbrk(intptr_t amount, int *retval) {
 		as->heap_top += amount;
 	}
 	else {
-		if(as->heap_top + amount < as->heap_bottom)
+		if(as->heap_top + amount < as->heap_bottom || as->heap_bottom + amount > as->heap_top) // check overflow too
 			return EINVAL;
 		
 		*retval = as->heap_top;
