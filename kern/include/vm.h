@@ -52,6 +52,8 @@
 #define VM_FAULT_WRITE       1    /* A write was attempted */
 #define VM_FAULT_READONLY    2    /* A write to a readonly page was attempted*/
 
+#define ROUND_UP(num, denom)			((((num) - 1) / (denom)) + 1)
+
 union metadata {
 	struct {
 		unsigned int swap : 20, : 5;	// address in swap

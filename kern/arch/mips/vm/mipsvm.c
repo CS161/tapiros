@@ -326,8 +326,9 @@ static long find_cmi(struct addrspace *as) {
 }
 
 
+// *** 'as_splk' marks whether the address space spinlock is held when calling the function
+// *** If not 'as_splk', the CME has its busy bit set at the end - remember to unset and wake
 // 'perms' is nonzero when calling from as_define_region()
-// 'as_splk' marks whether the address space spinlock is held when calling the function
 // If no flags are set, appropriate default values for stack/heap are used 
 // (but vaddr must be a valid stack/heap address).
 // Returns 0 upon success.
@@ -361,6 +362,9 @@ int alloc_upage(struct addrspace *as, vaddr_t vaddr, uint8_t perms, bool as_splk
 	*pte = new_pte;
 
 	KASSERT(pte->addr != 0);
+
+	if(!as_splk)
+		core_map[i].md.busy = 1;
 
 	spinlock_release(&core_map_splk);
 
@@ -450,7 +454,7 @@ void free_upage(struct addrspace *as, vaddr_t vaddr, bool as_splk) {
 
 	pte->all = 0;
 
-	if(!as_splk)
+	if(!as_splk) 
 		spinlock_release(&as->addr_splk);
 }
 
@@ -458,15 +462,19 @@ void free_upage(struct addrspace *as, vaddr_t vaddr, bool as_splk) {
 // *** Assumes no spinlocks are held
 // calls alloc_upage() multiple times with error handling
 int alloc_upages(struct addrspace *as, vaddr_t vaddr, unsigned npages, uint8_t perms) {
+	spinlock_acquire(&as->addr_splk);
+
 	for(unsigned i = 0; i < npages; i++) {
-		int err = alloc_upage(as, vaddr + i * PAGE_SIZE, perms, false);
+		int err = alloc_upage(as, vaddr + i * PAGE_SIZE, perms, true);
 		if(err != 0) {
 			for(unsigned j = 0; j < i; j++) {
-				free_upage(as, vaddr + i * PAGE_SIZE, false);
+				free_upage(as, vaddr + i * PAGE_SIZE, true);
 			}
+			spinlock_release(&as->addr_splk);
 			return err;
 		}
 	}
+	spinlock_release(&as->addr_splk);
 	return 0;
 }
 
@@ -530,13 +538,17 @@ void pth_copy(struct addrspace *old, struct addrspace *new) {
 					new_pte->p = 1;
 
 					spinlock_release(&old->addr_splk);
-					// If other threads could work in the old address space during the copy,
-					// this would have race conditions, but since we're singlethreaded and only call
-					// as_copy from fork() on the original thread, we're good.
 
 					int err = alloc_upage(new, L12_TO_VADDR(i,j), 1, false);
 
 					spinlock_acquire(&old->addr_splk);
+					spinlock_acquire(&new->addr_splk);	// nothing will acquire new then old, so this won't deadlock
+					spinlock_acquire(&core_map_splk);
+
+					core_map[PTE_TO_CMI(new_pte)].md.busy = 0;
+					wchan_wakeall(new->addr_wchan, &new->addr_splk);
+
+					spinlock_release(&new->addr_splk);
 
 						// use '1' for perms so that any region is valid, not just stack/heap
 						// pretend we hold the spinlock already because we know it's not needed
@@ -544,18 +556,17 @@ void pth_copy(struct addrspace *old, struct addrspace *new) {
 
 					if(!old_pte->p) {
 						// read from swap into the new page
-						spinlock_acquire(&core_map_splk);
-
+						
 						swap_copy_in(old, L12_TO_VADDR(i,j), PTE_TO_CMI(new_pte));
 						core_map[PTE_TO_CMI(new_pte)].md.s_pres = 0;	// can't have two pages reference the same swap
 
-						spinlock_release(&core_map_splk);
 					}
 					else {
 						memcpy((void *) PADDR_TO_KVADDR(FRAME_TO_ADDR(new_pte->addr)), 
 								(void *) PADDR_TO_KVADDR(FRAME_TO_ADDR(old_pte->addr)), 
 								PAGE_SIZE);
 					}
+					spinlock_release(&core_map_splk);
 				}
 			}
 		}

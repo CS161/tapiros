@@ -152,7 +152,7 @@ as_define_region(struct addrspace *as, vaddr_t vaddr, size_t memsize,
 	vaddr &= PAGE_FRAME;
 	uint8_t perms = 1;
 
-	unsigned npages = (memsize + PAGE_SIZE - 1) / PAGE_SIZE; // round up memsize to next page
+	unsigned npages = ROUND_UP(memsize, PAGE_SIZE);
 
 	if(vaddr + npages * PAGE_SIZE > USERSTACKBOTTOM - USERHEAPSIZE)
 		return EINVAL;
