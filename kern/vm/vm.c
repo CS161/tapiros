@@ -3,6 +3,7 @@
  */
 
 #include <vm.h>
+#include <addrspace.h>
 
 
 // It's relevant to note that our core map starts at the core map's page;

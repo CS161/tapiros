@@ -1228,40 +1228,41 @@ ipi_tlbshootdown(struct cpu *target, const struct tlbshootdown *mapping)
  * Send a TLB shootdown IPI to all CPUs.
  */
 void
-ipi_broadcast_tlbshootdown(uint32_t oldentryhi, struct addrspace *as)
+ipi_broadcast_tlbshootdown(const struct tlbshootdown *ts)
 {
-	spinlock_acquire(&ts_splk);
+	int result = tlb_probe(ts->oldentryhi, 0);
+	if(result >= 0)
+		tlb_write(TLBHI_INVALID(result), TLBLO_INVALID(), result);
+	else {
+		spinlock_acquire(&ts_splk);
 
-	struct tlbshootdown ts;
-	ts.oldentryhi = oldentryhi;
-	ts.as = as;
-
-	while(ts_count != -1) {
-		wchan_sleep(ts_wchan, &ts_splk);
-	}
-
-	unsigned i;
-	struct cpu *c;
-	unsigned num = cpuarray_num(&allcpus);
-
-	ts_count = num;
-
-	for (i=0; i < num; i++) {
-		c = cpuarray_get(&allcpus, i);
-		if (c != curcpu->c_self) {
-			ipi_tlbshootdown(c, &ts);
+		while(ts_count != -1) {
+			wchan_sleep(ts_wchan, &ts_splk);
 		}
+
+		unsigned i;
+		struct cpu *c;
+		unsigned num = cpuarray_num(&allcpus);
+
+		ts_count = num - 1;
+
+		for (i=0; i < num; i++) {
+			c = cpuarray_get(&allcpus, i);
+			if (c != curcpu->c_self) {
+				ipi_tlbshootdown(c, ts);
+			}
+		}
+
+		while(ts_count != 0) {
+			wchan_sleep(ts_wchan, &ts_splk);
+		}
+
+		ts_count = -1;
+
+		wchan_wakeall(ts_wchan, &ts_splk);
+
+		spinlock_release(&ts_splk);
 	}
-
-	while(ts_count != 0) {
-		wchan_sleep(ts_wchan, &ts_splk);
-	}
-
-	ts_count = -1;
-
-	wchan_wakeall(ts_wchan, &ts_splk);
-
-	spinlock_release(&ts_splk);
 }
 
 /*

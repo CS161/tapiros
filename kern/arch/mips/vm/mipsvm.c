@@ -87,6 +87,7 @@ static long choose_page_to_swap(void) {
 
 
 // *** Assumes that the address space and core map spinlocks are held
+// *** Assumes that the CME has been marked busy by us and doesn't change its status
 // Put a copy of data tracked in the core map at 'cmi' into swap 
 // (either at an existing index or a new one) and update the CME accordingly.
 void swap_copy_out(struct addrspace *as, unsigned long cmi) {
@@ -108,8 +109,6 @@ void swap_copy_out(struct addrspace *as, unsigned long cmi) {
 	else
 		swapi = cme->md.swap;
 
-	cme->md.busy = 1;
-
 	spinlock_release(&core_map_splk);
 	spinlock_release(&as->addr_splk);
 
@@ -128,10 +127,7 @@ void swap_copy_out(struct addrspace *as, unsigned long cmi) {
 	spinlock_acquire(&as->addr_splk);
 	spinlock_acquire(&core_map_splk);
 
-	cme->md.busy = 0;
 	cme->md.dirty = 0;
-
-	wchan_wakeall(as->addr_wchan, &as->addr_splk);
 }
 
 
@@ -148,7 +144,6 @@ void swap_out(unsigned long cmi, struct addrspace *other_as) {
 
 	spinlock_acquire(&as->addr_splk);
 	spinlock_acquire(&core_map_splk);
-	cme->md.busy = 0;
 
 	union page_table_entry *pte = VADDR_TO_PTE(cme->as->ptd, cme->va);
 
@@ -160,15 +155,30 @@ void swap_out(unsigned long cmi, struct addrspace *other_as) {
 		spinlock_acquire(&core_map_splk);
 	}
 
+	if(cme->md.tlb) {
+		spinlock_release(&core_map_splk);
+		spinlock_release(&as->addr_splk);
+
+		const struct tlbshootdown ts = {TLBHI_VPAGE & cme->va, as};
+
+		ipi_broadcast_tlbshootdown(&ts);
+
+		spinlock_acquire(&as->addr_splk);
+		spinlock_acquire(&core_map_splk);
+	}
+
 	if(cme->md.dirty || !cme->md.s_pres) {
 		swap_copy_out(as, cmi);
 	}
 
-	KASSERT(!cme->md.busy);
 	KASSERT(cme->md.s_pres);
 
 	pte->p = 0;
 	pte->addr = cme->md.swap;
+
+	wchan_wakeall(as->addr_wchan, &as->addr_splk);
+	// now that the cme doesn't belong to that as,
+	// they'll be able to wake up
 
 	cme->va = 0;
 	cme->as = 0;
@@ -182,6 +192,8 @@ void swap_out(unsigned long cmi, struct addrspace *other_as) {
 	spinlock_acquire(&core_map_splk);
 
 	cme->md.busy = 0;
+	// no one can be waiting on this beacuse it
+	// doesn't have an address space
 }
 
 
@@ -255,14 +267,25 @@ void swap_in(struct addrspace *as, vaddr_t vaddr) {
 }
 
 
-// *** Assumes that you hold the spinlock of the addrspace 'ptd' belongs to
+// *** Assumes that you hold the spinlock of the addrspace 'as' belongs to
 // Gets the PTE for a virtual address, or creates one if it doesn't yet exist.
 // If the existence of the PTE is an invariant, use VADDR_TO_PTE() instead.
-static union page_table_entry* get_pte(struct page_table_directory *ptd, vaddr_t vaddr) {
+static union page_table_entry* get_pte(struct addrspace *as, vaddr_t vaddr, bool as_splk) {
 	
+	struct page_table_directory *ptd = as->ptd;
+
 	vaddr_t l1 = L1INDEX(vaddr);
 	if(ptd->pts[l1] == 0) {
+		if(as_splk)
+			spinlock_release(&as->addr_splk);
+		// no other address space will be allocating new PTEs, 
+		// so we can let go of the spinlock without causing problems
+
 		ptd->pts[l1] = kmalloc(sizeof(struct page_table));
+
+		if(as_splk)
+			spinlock_acquire(&as->addr_splk);
+
 		bzero(ptd->pts[l1], sizeof(struct page_table));
 	}
 
@@ -310,7 +333,7 @@ int alloc_upage(struct addrspace *as, vaddr_t vaddr, uint8_t perms, bool as_splk
 	if(!as_splk)
 		spinlock_acquire(&as->addr_splk);
 
-	union page_table_entry *pte = get_pte(as->ptd, vaddr);
+	union page_table_entry *pte = get_pte(as, vaddr, true);
 	KASSERT(pte->addr == 0);
 
 	spinlock_acquire(&core_map_splk);
@@ -473,7 +496,6 @@ void pth_copy(struct addrspace *old, struct addrspace *new) {
 	// core map (so swap functions might now try to access it), we never touch its PTE again
 
 	struct page_table_directory *old_ptd = old->ptd;
-	struct page_table_directory *new_ptd = new->ptd;
 
 	unsigned long max = L1INDEX(USERSPACETOP);	// no page tables address MIPS_KSEG0 or up
 	for(unsigned long i = 0; i < max; i++) {
@@ -482,7 +504,11 @@ void pth_copy(struct addrspace *old, struct addrspace *new) {
 			for(unsigned long j = 0; j < NUM_PTES; j++) {
 				if(old_pt->ptes[j].addr != 0) {
 					union page_table_entry *old_pte = &old_pt->ptes[j];
-					union page_table_entry *new_pte = get_pte(new_ptd, L12_TO_VADDR(i,j));
+
+					spinlock_release(&old->addr_splk);
+					union page_table_entry *new_pte = get_pte(new, L12_TO_VADDR(i,j), false);
+					spinlock_acquire(&old->addr_splk);
+
 					new_pte->addr = 0;
 					new_pte->p = 1;
 
@@ -612,7 +638,7 @@ static unsigned long choose_tlb_entry() {
 int tlb_miss(struct addrspace *as, vaddr_t faultaddress) {
 	spinlock_acquire(&as->addr_splk);
 
-	union page_table_entry *pte = get_pte(as->ptd, faultaddress);
+	union page_table_entry *pte = get_pte(as, faultaddress, true);
 
 	if(pte->addr == 0) {
 		int err = alloc_upage(as, faultaddress, 0, true);
