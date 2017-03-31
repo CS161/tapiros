@@ -249,6 +249,8 @@ void swap_copy_in(struct addrspace *as, vaddr_t vaddr, unsigned long cmi) {
 	cme->md.swap = pte->addr;
 	cme->md.s_pres = 1;
 
+	KASSERT(cme->md.kernel == 0);
+
 	pte->addr = ADDR_TO_FRAME(CMI_TO_PADDR(cmi));
 	pte->p = 1;
 	pte->b = 0;
@@ -405,7 +407,12 @@ void free_upage(struct addrspace *as, vaddr_t vaddr, bool as_splk) {
 		KASSERT(core_map[i].md.busy == 0);
 		KASSERT(pte->b == 0);
 
-		// ***will need to handle tlb shootdowns here
+		if(core_map[i].md.tlb == 1) {
+			int result = tlb_probe(TLBHI_VPAGE & vaddr, 0);
+			if(result >= 0)
+				tlb_write(TLBHI_INVALID(result), TLBLO_INVALID(), result);
+		}
+
 		core_map[i].va = 0;
 		core_map[i].as = NULL;
 		core_map[i].md.all = 0;
