@@ -160,7 +160,7 @@ struct tlbshootdown {
 	struct addrspace *as;
 };
 
-unsigned ts_count;
+int ts_count;
 struct spinlock ts_splk;
 struct wchan *ts_wchan;
 

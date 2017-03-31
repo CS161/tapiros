@@ -45,7 +45,7 @@ void swap_bootstrap(void) {
 
 	// TLB shootdown setup
 
-	ts_count = 0;
+	ts_count = -1;
 
 	spinlock_init(&ts_splk);
 
