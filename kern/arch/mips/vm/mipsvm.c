@@ -283,7 +283,7 @@ void swap_in(struct addrspace *as, vaddr_t vaddr) {
 // Gets the PTE for a virtual address, or creates one if it doesn't yet exist.
 // If the existence of the PTE is an invariant, use VADDR_TO_PTE() instead.
 static union page_table_entry* get_pte(struct addrspace *as, vaddr_t vaddr, bool as_splk) {
-	
+
 	struct page_table_directory *ptd = as->ptd;
 
 	vaddr_t l1 = L1INDEX(vaddr);
@@ -347,6 +347,7 @@ int alloc_upage(struct addrspace *as, vaddr_t vaddr, uint8_t perms, bool as_splk
 		spinlock_acquire(&as->addr_splk);
 
 	union page_table_entry *pte = get_pte(as, vaddr, true);
+
 	KASSERT(pte->addr == 0);
 
 	spinlock_acquire(&core_map_splk);
@@ -356,6 +357,7 @@ int alloc_upage(struct addrspace *as, vaddr_t vaddr, uint8_t perms, bool as_splk
 	KASSERT(core_map[i].md.kernel == 0);
 	core_map[i].va = vaddr;
 	core_map[i].as = as;
+	core_map[i].md.all = 0;
 	new_pte.p = 1;
 	new_pte.addr = ADDR_TO_FRAME(CMI_TO_PADDR(i));
 	bzero((void *) PADDR_TO_KVADDR(CMI_TO_PADDR(i)), PAGE_SIZE);
@@ -532,6 +534,7 @@ void pth_copy(struct addrspace *old, struct addrspace *new) {
 
 					spinlock_release(&old->addr_splk);
 					union page_table_entry *new_pte = get_pte(new, L12_TO_VADDR(i,j), false);
+
 					spinlock_acquire(&old->addr_splk);
 
 					new_pte->addr = 0;
