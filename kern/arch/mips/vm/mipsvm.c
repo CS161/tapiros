@@ -22,31 +22,37 @@ static void mat_daemon(void *a, unsigned long b) {
 	while(true) {
 		s = 1;
 
-		if(nfree > 0 && ncmes / nfree < 8)  { 		// more than 1/8 of memory is free
+		if(nfree > 0 && ncmes / nfree < 6)  { 		// more than 1/8 of memory is free
 			s = 8 - (ncmes / nfree);				// sleep less if less memory is free
 			goto bed;
 		}
 
 		if(nswap / ncmes > 2) {			// if there's a lot more in swap than RAM,
-			s = 2 * nswap / ncmes;		// writing back with the daemon will just waste time,
-			goto bed;					// so go to sleep for a while
+			s = 2 * nswap / ncmes;		// writing back with the daemon will just waste time
+			goto bed;					// since it's probably already thrashing
 		}
 
 		nmax = (ndirty * nswap) / ncmes;
 		i = clock;
 		n = 0, t = 0;
 
-		spinlock_acquire(&core_map_splk);
 		while(n < nmax && t < ncmes) {	// t just in case nmax is too big (from busy or tlb dirty pages)
 			if(i == ncmes)
 				i = 0;
-			if(!core_map[i].md.kernel && !core_map[i].md.busy && !core_map[i].md.tlb) {
+			if(core_map[i].va != 0 && !core_map[i].md.kernel && !core_map[i].md.busy && !core_map[i].md.tlb && core_map[i].md.dirty) {
+				spinlock_acquire(&core_map_splk); 	// only acquire spinlocks once you find a suitable entry
+													// give up if the entry changed since you checked
+													// hopefully this will make the daemon block productive threads less
 
-				core_map[i].md.busy = 1;
 				as = core_map[i].as;
+				if(!(core_map[i].va != 0 && !core_map[i].md.kernel && !core_map[i].md.busy && !core_map[i].md.tlb && core_map[i].md.dirty)) {
+					spinlock_release(&core_map_splk);	// the core map entry isn't good anymore
+					goto next;
+				}
 
-				spinlock_release(&core_map_splk);
-				spinlock_acquire(&as->addr_splk);
+				spinlock_acquire(&core_map_splk);	// do a little dance to keep the cme synchronized
+				core_map[i].md.busy = 1;			// and prevent deadlock
+				spinlock_acquire(&as->addr_splk);	
 				spinlock_acquire(&core_map_splk);
 
 				swap_copy_out(as, i);
@@ -55,11 +61,13 @@ static void mat_daemon(void *a, unsigned long b) {
 				core_map[i].md.busy = 0;
 				wchan_wakeall(as->addr_wchan, &as->addr_splk);
 				spinlock_release(&as->addr_splk);
+				spinlock_release(&core_map_splk);
 			}
-			i++;
-			t++;
+
+			next:
+				i++;
+				t++;
 		}
-		spinlock_release(&core_map_splk);
 
 		bed:
 			clocksleep(s);
