@@ -163,7 +163,7 @@ as_define_region(struct addrspace *as, vaddr_t vaddr, size_t memsize,
 	if(err != 0)
 		return err;
 
-	as->heap_bottom = vaddr + npages * PAGE_SIZE;
+	as->heap_bottom = vaddr + npages * PAGE_SIZE;	// heap will end up starting on top of the last mapped region
 	as->heap_top = as->heap_bottom;
 
 	return 0;
