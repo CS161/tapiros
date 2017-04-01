@@ -27,6 +27,10 @@ void vm_bootstrap(void) {
 		core_map[i].md.kernel = 1;
 	}
 	spinlock_init(&core_map_splk);
+
+	nfree = ncmes - npages;
+	ndirty = 0;
+	nswap = 0;
 }
 
 // to check for memory leaks
@@ -46,13 +50,13 @@ int print_core_map(int nargs, char **args) {
 	kprintf("\nKernel Pages: %lu\nUser Pages: %lu\nTotal Pages: %lu\n\n", nkernel, nuser, nkernel + nuser);
 
 	unsigned int i;
-	for(i = 1; i < nswap; i++) {
+	for(i = 1; i < swap_size; i++) {
 		if(bitmap_isset(swap_bitmap, i)) {
 			kprintf("Swap isn't properly zeroed.\n");
 			break;
 		}
 	}
-	if(i == nswap)
+	if(i == swap_size)
 		kprintf("Swap is properly zeroed.\n");
 
 	return 0;
@@ -204,6 +208,7 @@ vaddr_t alloc_kpages(unsigned npages) {
 		core_map[j].va = ((vaddr_t) core_map) + j * PAGE_SIZE;
 		core_map[j].md.kernel = 1;
 		core_map[j].md.busy = 0;
+		nfree--;
 
 		KASSERT(core_map[j].md.contig == 0);
 	}
@@ -234,6 +239,7 @@ void free_kpages(vaddr_t addr) {
 		core_map[i].va = 0;
 		core_map[i].md.kernel = 0;
 		i++;
+		nfree++;
 	}
 	KASSERT(core_map[i].va != 0);
 	KASSERT(core_map[i].md.kernel == 1);
@@ -241,6 +247,7 @@ void free_kpages(vaddr_t addr) {
 	core_map[i].va = 0;
 	core_map[i].md.kernel = 0;
 	core_map[i].md.contig = 0;
+	nfree++;
 
 	spinlock_release(&core_map_splk);
 }

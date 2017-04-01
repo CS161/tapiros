@@ -80,10 +80,15 @@ unsigned long ncmes;
 unsigned long clock;
 struct spinlock core_map_splk;
 
+// stat tracking
+unsigned long nfree;
+unsigned long ndirty;
+unsigned long nswap;
+
 struct vnode *swap_vnode;
 struct bitmap *swap_bitmap;
-struct lock *swap_lk;	// protects access to swap_bitmap and swap_vnode
-unsigned long nswap;
+struct lock *swap_lk;			// protects access to swap_bitmap and swap_vnode
+unsigned long swap_size;
 
 /* Initialization function */
 void vm_bootstrap(void);

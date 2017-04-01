@@ -11,6 +11,60 @@
 #include <vnode.h>
 #include <kern/stat.h>
 #include <uio.h>
+#include <clock.h>
+
+
+static void mat_daemon(void *a, unsigned long b) {
+	(void) a;
+	(void) b;
+	unsigned long i, n, nmax, s, t;
+	struct addrspace *as;
+	while(true) {
+		s = 1;
+
+		if(nfree > 0 && ncmes / nfree < 8)  { 		// more than 1/8 of memory is free
+			s = 8 - (ncmes / nfree);				// sleep less if less memory is free
+			goto bed;
+		}
+
+		if(nswap / ncmes > 2) {			// if there's a lot more in swap than RAM,
+			s = 2 * nswap / ncmes;		// writing back with the daemon will just waste time,
+			goto bed;					// so go to sleep for a while
+		}
+
+		nmax = (ndirty * nswap) / ncmes;
+		i = clock;
+		n = 0, t = 0;
+
+		spinlock_acquire(&core_map_splk);
+		while(n < nmax && t < ncmes) {	// t just in case nmax is too big (from busy or tlb dirty pages)
+			if(i == ncmes)
+				i = 0;
+			if(!core_map[i].md.kernel && !core_map[i].md.busy && !core_map[i].md.tlb) {
+
+				core_map[i].md.busy = 1;
+				as = core_map[i].as;
+
+				spinlock_release(&core_map_splk);
+				spinlock_acquire(&as->addr_splk);
+				spinlock_acquire(&core_map_splk);
+
+				swap_copy_out(as, i);
+				n++;
+
+				core_map[i].md.busy = 0;
+				wchan_wakeall(as->addr_wchan, &as->addr_splk);
+				spinlock_release(&as->addr_splk);
+			}
+			i++;
+			t++;
+		}
+		spinlock_release(&core_map_splk);
+
+		bed:
+			clocksleep(s);
+	}
+}
 
 
 void swap_bootstrap(void) {
@@ -25,11 +79,11 @@ void swap_bootstrap(void) {
 		panic("vop_stat on swap_vnode failed with error: %s\n", strerror(err));
 	}
 
-	nswap = stats.st_size / PAGE_SIZE;
-	if(nswap >= (2 << 20))		// swap address is stored in 20 bits (minus one for 0)
-		nswap = (2 << 20) - 1;
+	swap_size = stats.st_size / PAGE_SIZE;
+	if(swap_size >= (2 << 20))		// swap address is stored in 20 bits (minus one for 0)
+		swap_size = (2 << 20) - 1;
 
-	swap_bitmap = bitmap_create(nswap);
+	swap_bitmap = bitmap_create(swap_size);
 	if(swap_bitmap == NULL) {
 		panic("bitmap_create of swap_bitmap failed\n");
 	}
@@ -42,6 +96,7 @@ void swap_bootstrap(void) {
 
 	clock = 0;
 
+
 	// TLB shootdown setup
 
 	ts_count = -1;
@@ -51,6 +106,14 @@ void swap_bootstrap(void) {
 	ts_wchan = wchan_create("ts_wchan");
 	if(ts_wchan == NULL) {
 		panic("wchan_create of ts_wchan failed\n");
+	}
+
+
+	// Initialize write-back daemon
+
+	int result = thread_fork("MAT Daemon", NULL, mat_daemon, NULL, 0);
+	if (result) {
+		panic("mat daemon thread_fork failed: %s\n", strerror(result));
 	}
 }
 
@@ -116,6 +179,8 @@ void swap_copy_out(struct addrspace *as, unsigned long cmi) {
 		if(err != 0)
 			panic("Out of swap space :(\n");
 
+		nswap++;
+
 		cme->md.s_pres = 1;
 		cme->md.swap = swapi;
 	}
@@ -140,7 +205,8 @@ void swap_copy_out(struct addrspace *as, unsigned long cmi) {
 	spinlock_acquire(&as->addr_splk);
 	spinlock_acquire(&core_map_splk);
 
-	cme->md.dirty = 0;
+	cme->md.dirty = 0;	// swap_copy_out is only called on ptes not in the TLB
+	ndirty--;			// (including ones that were just shot down)
 
 	KASSERT(cme->md.busy == 1);
 }
@@ -203,16 +269,16 @@ void swap_out(unsigned long cmi, struct addrspace *other_as) {
 	pte->b = 0;
 	pte->addr = cme->md.swap;
 
-	wchan_wakeall(as->addr_wchan, &as->addr_splk);
-	// now that the cme doesn't belong to that as,
-	// they'll be able to wake up
-
 	KASSERT(cme->md.busy == 1);
 
 	cme->va = 0;
 	cme->as = 0;
 	cme->md.all = 0;
 	cme->md.busy = 1;
+
+	wchan_wakeall(as->addr_wchan, &as->addr_splk);
+	// now that the cme doesn't belong to that as,
+	// they'll be able to wake up
 
 	spinlock_release(&core_map_splk);
 	spinlock_release(&as->addr_splk);
@@ -343,8 +409,10 @@ static union page_table_entry* get_pte(struct addrspace *as, vaddr_t vaddr, bool
 static long find_cmi(struct addrspace *as) {
 	long i;
 	for(i = 0; i < (long) ncmes; i++) {
-		if(!core_map[i].md.busy && core_map[i].va == 0)
+		if(!core_map[i].md.busy && core_map[i].va == 0) {
+			nfree--;
 			return i;
+		}
 	}
 
 	i = choose_page_to_swap();
@@ -463,6 +531,7 @@ void free_upage(struct addrspace *as, vaddr_t vaddr, bool as_splk) {
 		core_map[i].va = 0;
 		core_map[i].as = NULL;
 		core_map[i].md.all = 0;
+		nfree--;
 
 		if(core_map[i].md.s_pres) {
 			spinlock_release(&core_map_splk);
@@ -470,6 +539,7 @@ void free_upage(struct addrspace *as, vaddr_t vaddr, bool as_splk) {
 			lock_acquire(swap_lk);
 
 			bitmap_unmark(swap_bitmap, pte->addr);
+			nswap--;
 
 			lock_release(swap_lk);
 			spinlock_acquire(&as->addr_splk);
@@ -489,6 +559,7 @@ void free_upage(struct addrspace *as, vaddr_t vaddr, bool as_splk) {
 		lock_acquire(swap_lk);
 
 		bitmap_unmark(swap_bitmap, pte->addr);
+		nswap--;
 
 		lock_release(swap_lk);
 
@@ -688,6 +759,7 @@ int perms_fault(struct addrspace *as, vaddr_t faultaddress) {
 	}
 
 	core_map[i].md.dirty = 1;
+	ndirty++;
 
 	// spinlock turns off interrupts, so TLB won't get messed up
 
