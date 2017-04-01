@@ -27,7 +27,7 @@ static void mat_daemon(void *a, unsigned long b) {
 			goto bed;
 		}
 
-		if(nswap / ncmes > 2) {			// if there's a lot more in swap than RAM,
+		if(nswap / ncmes > 1) {			// if there's a lot more in swap than RAM,
 			s = 2 * nswap / ncmes;		// writing back with the daemon will just waste time
 			goto bed;					// since it's probably already thrashing
 		}
@@ -536,17 +536,20 @@ void free_upage(struct addrspace *as, vaddr_t vaddr, bool as_splk) {
 				tlb_write(TLBHI_INVALID(result), TLBLO_INVALID(), result);
 		}
 
+		bool s_pres = core_map[i].md.s_pres;
+		unsigned long swapi = core_map[i].md.swap;
+
 		core_map[i].va = 0;
 		core_map[i].as = NULL;
 		core_map[i].md.all = 0;
 		nfree--;
 
-		if(core_map[i].md.s_pres) {
+		if(s_pres) {
 			spinlock_release(&core_map_splk);
 			spinlock_release(&as->addr_splk);	
 			lock_acquire(swap_lk);
 
-			bitmap_unmark(swap_bitmap, pte->addr);
+			bitmap_unmark(swap_bitmap, swapi);
 			nswap--;
 
 			lock_release(swap_lk);
