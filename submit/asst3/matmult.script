@@ -1,0 +1,77 @@
+Script started on Sat 01 Apr 2017 01:05:19 AM EDT
+]0;vagrant@cs61-appliance: ~vagrant@cs61-appliance:~$ cd ~/cs161/root
+]0;vagrant@cs61-appliance: ~/cs161/rootvagrant@cs61-appliance:~/cs161/root$ sys161 kernel
+sys161: System/161 release 2.0.8, compiled Mar  2 2016 15:46:03
+
+OS/161 base system version 2.0.3
+Copyright (c) 2000, 2001-2005, 2008-2011, 2013, 2014
+   President and Fellows of Harvard College.  All rights reserved.
+
+ _____           _       ___  ____
+|_   _|_ _ _ __ (_)_ __ / _ \/ ___|
+  | |/ _` | '_ \| | '__| | | \___ \
+  | | (_| | |_) | | |  | |_| |___) |
+  |_|\__,_| .__/|_|_|   \___/|____/
+          |_|
+         _,.,.__,--.__,-----.
+      ,""   '))              `.
+    ,'   e                    ))
+   (  .='__,                  ,
+    `~`     `-\  /._____,/   /
+             | | )    (  (   ;
+             | | |    / / / /
+     vvVVvvVvVVVvvVVVvvVVvVvvvV
+TapirOS system version ta.pi.r (ASST3 #520)
+
+792k physical memory available
+Device probe...
+lamebus0 (system main bus)
+emu0 at lamebus0
+ltrace0 at lamebus0
+ltimer0 at lamebus0
+beep0 at ltimer0
+rtclock0 at ltimer0
+lrandom0 at lamebus0
+random0 at lrandom0
+lhd0 at lamebus0
+lhd1 at lamebus0
+lser0 at lamebus0
+con0 at lser0
+
+cpu0: MIPS/161 (System/161 2.x) features 0x0
+cpu1: MIPS/161 (System/161 2.x) features 0x0
+cpu2: MIPS/161 (System/161 2.x) features 0x0
+cpu3: MIPS/161 (System/161 2.x) features 0x0
+buffers: max count 512; max size 256k
+vfs: Swap attached to lhd0
+OS/161 kernel [? for menu]: s
+/bin/sh: Timing enabled.
+OS/161$ matmult
+matmult finished.
+answer is: 8772192 (should be 8772192)
+Passed.
+/bin/sh: subprocess time: 67.914530488 seconds
+OS/161$ p /sbin/poweroff <returnp /sbin/poweroff <return. >[D[D[D                                                       p /sbin/poweroff <return>
+/bin/sh: p: No such file or directory
+/bin/sh: subprocess time: 0.108120521 seconds
+Exit 1
+OS/161$ exit
+Operation took 95.659790224 seconds
+OS/161 kernel [? for menu]: p /sbin/poweroff <return>
+Shutting down.
+cpu1: offline.
+The system is halted.
+cpu2: offline.
+cpu3: offline.
+sys161: 3177187895 cycles (729775835 run, 2447412060 global-idle)
+sys161:   cpu0: 107156537 kern, 5388301 user, 451561 idle; 212065 ll, 212064/1 sc, 586059 sync
+sys161:   cpu1: 3109455 kern, 0 user, 109886944 idle; 2497 ll, 2497/0 sc, 38667 sync
+sys161:   cpu2: 3498308 kern, 0 user, 109498091 idle; 5372 ll, 5370/2 sc, 11809 sync
+sys161:   cpu3: 2814931 kern, 0 user, 110181468 idle; 3217 ll, 3215/2 sc, 6174 sync
+sys161: 18150 irqs 8252 exns 6448r/6192w disk 188r/1906w console 26r/0w/7m emufs 0r/0w net
+sys161: Elapsed real time: 34.977872 seconds (90.8342 mhz)
+sys161: Elapsed virtual time: 102.420774685 seconds (25 mhz)
+]0;vagrant@cs61-appliance: ~/cs161/rootvagrant@cs61-appliance:~/cs161/root$ exit
+exit
+
+Script done on Sat 01 Apr 2017 01:06:13 AM EDT
