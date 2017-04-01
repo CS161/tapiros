@@ -36,10 +36,8 @@ int sys_sbrk(intptr_t amount, int *retval) {
 		as->heap_top += amount;
 	}
 	else {
-		if((unsigned) (-1 * amount) > as->heap_top - as->heap_bottom) { // check overflow too
-			kprintf("whyyyy\n");
+		if((unsigned) (-1 * amount) > as->heap_top - as->heap_bottom) // check overflow too
 			return EINVAL;
-		}
 		
 		*retval = as->heap_top;
 		as->heap_top += amount;
