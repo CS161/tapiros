@@ -203,6 +203,9 @@ vaddr_t alloc_kpages(unsigned npages) {
 
 			spinlock_release(&other_as->addr_splk);
 		}
+		else
+			nfree--;
+
 		KASSERT(core_map[j].va == 0);
 		KASSERT(core_map[j].md.kernel == 0);
 		KASSERT(core_map[j].as == NULL);
@@ -211,7 +214,6 @@ vaddr_t alloc_kpages(unsigned npages) {
 		core_map[j].va = ((vaddr_t) core_map) + j * PAGE_SIZE;
 		core_map[j].md.kernel = 1;
 		core_map[j].md.busy = 0;
-		nfree--;
 
 		KASSERT(core_map[j].md.contig == 0);
 	}

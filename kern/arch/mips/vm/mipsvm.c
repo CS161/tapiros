@@ -22,7 +22,6 @@ static void mat_daemon(void *a, unsigned long b) {
 	struct addrspace *as;
 	while(true) {
 		s = 1;
-
 		if(nfree > 0 && ncmes / nfree < 6)  { 		// more than 1/8 of memory is free
 			s = 8 - (ncmes / nfree);				// sleep less if less memory is free
 			goto bed;
@@ -377,6 +376,9 @@ void swap_in(struct addrspace *as, vaddr_t vaddr) {
 
 	if(core_map[cmi].va != 0)
 		swap_out(cmi, as);
+	else {
+		nfree--;
+	}
 
 	KASSERT(core_map[cmi].md.busy == 0);
 	KASSERT(core_map[cmi].va == 0);
@@ -548,7 +550,7 @@ void free_upage(struct addrspace *as, vaddr_t vaddr, bool as_splk) {
 		core_map[i].va = 0;
 		core_map[i].as = NULL;
 		core_map[i].md.all = 0;
-		nfree--;
+		nfree++;
 
 		if(s_pres) {
 			spinlock_release(&core_map_splk);
