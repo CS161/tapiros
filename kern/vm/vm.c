@@ -33,7 +33,8 @@ void vm_bootstrap(void) {
 	nswap = 0;
 }
 
-// to check for memory leaks
+// 'cm' in the kernel menu
+// handy to check for memory leaks, but now that they're fixed it's not so interesting
 int print_core_map(int nargs, char **args) {
 	(void) nargs;
 	(void) args;
@@ -62,9 +63,11 @@ int print_core_map(int nargs, char **args) {
 	return 0;
 }
 
+
+// Delegate responses to vm_faults
 int vm_fault(int faulttype, vaddr_t faultaddress) {
 
-	if(faultaddress < PAGE_SIZE || faultaddress >= USERSPACETOP) {
+	if(faultaddress < PAGE_SIZE || faultaddress >= USERSPACETOP) {	// reject NULL page pointer or kernel addresses
 		return EFAULT;
 	}
 
@@ -187,7 +190,7 @@ vaddr_t alloc_kpages(unsigned npages) {
 
 			struct addrspace *other_as = core_map[j].as;
 
-			spinlock_acquire(&other_as->addr_splk);
+			spinlock_acquire(&other_as->addr_splk);		// synchronization dance
 			spinlock_acquire(&core_map_splk);
 
 			KASSERT(core_map[j].md.busy == 1);
@@ -212,7 +215,7 @@ vaddr_t alloc_kpages(unsigned npages) {
 
 		KASSERT(core_map[j].md.contig == 0);
 	}
-	core_map[j-1].md.contig = 1;
+	core_map[j-1].md.contig = 1;	// mark only the final page in a chain
 
 	spinlock_release(&core_map_splk);
 
@@ -232,7 +235,7 @@ void free_kpages(vaddr_t addr) {
 	
 	spinlock_acquire(&core_map_splk);
 
-	while(core_map[i].md.contig == 0) {
+	while(core_map[i].md.contig == 0) {		// free non-final pages
 		KASSERT(core_map[i].va != 0);
 		KASSERT(core_map[i].md.kernel == 1);
 
@@ -244,7 +247,7 @@ void free_kpages(vaddr_t addr) {
 	KASSERT(core_map[i].va != 0);
 	KASSERT(core_map[i].md.kernel == 1);
 	KASSERT(core_map[i].md.contig == 1);
-	core_map[i].va = 0;
+	core_map[i].va = 0;						// free the final page
 	core_map[i].md.kernel = 0;
 	core_map[i].md.contig = 0;
 	nfree++;

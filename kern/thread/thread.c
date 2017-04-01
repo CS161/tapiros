@@ -1227,16 +1227,17 @@ ipi_tlbshootdown(struct cpu *target, const struct tlbshootdown *mapping)
 /*
  * Send a TLB shootdown IPI to all CPUs.
  */
+// *** Assumes no spinlocks are held
 void
 ipi_broadcast_tlbshootdown(const struct tlbshootdown *ts)
 {
-	int result = tlb_probe(ts->oldentryhi, 0);
+	int result = tlb_probe(ts->oldentryhi, 0);	// if the entry is on this cpu's TLB, we don't need an IPI
 	if(result >= 0)
 		tlb_write(TLBHI_INVALID(result), TLBLO_INVALID(), result);
 	else {
 		spinlock_acquire(&ts_splk);
 
-		while(ts_count != -1) {
+		while(ts_count != -1) {		// if someone else is issuing a shootdown, go to sleep so you can be interrupted
 			wchan_sleep(ts_wchan, &ts_splk);
 		}
 
@@ -1244,7 +1245,7 @@ ipi_broadcast_tlbshootdown(const struct tlbshootdown *ts)
 		struct cpu *c;
 		unsigned num = cpuarray_num(&allcpus);
 
-		ts_count = num - 1;
+		ts_count = num - 1;	// all other cpus will have to acknowledge receival
 
 		for (i=0; i < num; i++) {
 			c = cpuarray_get(&allcpus, i);
@@ -1253,13 +1254,13 @@ ipi_broadcast_tlbshootdown(const struct tlbshootdown *ts)
 			}
 		}
 
-		while(ts_count != 0) {
+		while(ts_count != 0) {	// wait until the shootdown is acknowledged
 			wchan_sleep(ts_wchan, &ts_splk);
 		}
 
 		ts_count = -1;
 
-		wchan_wakeall(ts_wchan, &ts_splk);
+		wchan_wakeall(ts_wchan, &ts_splk);	// trigger potential waiting shootdowns
 
 		spinlock_release(&ts_splk);
 	}

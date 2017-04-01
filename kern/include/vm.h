@@ -76,14 +76,14 @@ struct core_map_entry {
 };
 
 struct core_map_entry *core_map;
-unsigned long ncmes;
-unsigned long clock;
+unsigned long ncmes;				// number of core map entries
+unsigned long clock;				// pointer to clock hand for page eviction algorithm
 struct spinlock core_map_splk;
 
 // stat tracking
-unsigned long nfree;
-unsigned long ndirty;
-unsigned long nswap;
+unsigned long nfree;	// number of free physical pages
+unsigned long ndirty;	// number of dirty physical pages
+unsigned long nswap;	// number of pages in swap
 
 struct vnode *swap_vnode;
 struct bitmap *swap_bitmap;
@@ -93,7 +93,7 @@ unsigned long swap_size;
 /* Initialization function */
 void vm_bootstrap(void);
 void swap_bootstrap(void);
-int print_core_map(int nargs, char **args);
+int print_core_map(int nargs, char **args);	// accessed with 'cm' from the kernel menu
 
 /* Fault handling function called by trap code */
 int vm_fault(int faulttype, vaddr_t faultaddress);
@@ -105,6 +105,7 @@ vaddr_t alloc_kpages(unsigned npages);
 void free_kpages(vaddr_t addr);
 
 /* Allocate/free user pages */
+// See mipsvm.c for which spinlocks must/must not be held when calling these
 int alloc_upage(struct addrspace *as, vaddr_t vaddr, uint8_t perms, bool as_splk); // 'perms' is nonzero from as_define_region
 int alloc_upages(struct addrspace *as, vaddr_t vaddr, unsigned npages, uint8_t perms);
 void free_upage(struct addrspace *as, vaddr_t vaddr, bool as_splk);
@@ -114,6 +115,7 @@ void free_upages(struct addrspace *as, vaddr_t vaddr, unsigned npages);
 void pth_copy(struct addrspace *old, struct addrspace *new);
 
 /* Swap in/out pages */
+// See mipsvm.c for which spinlocks must/must not be held when calling these
 void swap_in(struct addrspace *as, vaddr_t vaddr);
 void swap_copy_in(struct addrspace *as, vaddr_t vaddr, unsigned long cmi);
 void swap_out(unsigned long cmi, struct addrspace *other_as);
@@ -121,6 +123,8 @@ void swap_copy_out(struct addrspace *as, unsigned long cmi);
 
 /* TLB shootdown handling called from interprocessor_interrupt */
 void vm_tlbshootdown(const struct tlbshootdown *ts);
+
+/* Invalidate the entire TLB; used in as_activate() */
 void invalidate_tlb(void);
 
 

@@ -13,7 +13,8 @@
 #include <uio.h>
 #include <clock.h>
 
-
+// write-back swap daemon
+// "Memory Access Traversal Daemon"
 static void mat_daemon(void *a, unsigned long b) {
 	(void) a;
 	(void) b;
@@ -33,8 +34,9 @@ static void mat_daemon(void *a, unsigned long b) {
 		}
 
 		nmax = (ndirty * nswap) / ncmes;
-		i = clock;
-		n = 0, t = 0;
+		i = clock;	// start at the clock index - preemptively swap out the pages that will be evicted soonest
+		n = 0;		// number of swapped dirty pages
+		t = 0;		// total number of pages iterated past
 
 		while(n < nmax && t < ncmes) {	// t just in case nmax is too big (from busy or tlb dirty pages)
 			if(i == ncmes)
@@ -88,8 +90,8 @@ void swap_bootstrap(void) {
 	}
 
 	swap_size = stats.st_size / PAGE_SIZE;
-	if(swap_size >= (2 << 20))		// swap address is stored in 20 bits (minus one for 0)
-		swap_size = (2 << 20) - 1;
+	if(swap_size >= (2 << 20))
+		swap_size = (2 << 20);
 
 	swap_bitmap = bitmap_create(swap_size);
 	if(swap_bitmap == NULL) {
@@ -107,7 +109,7 @@ void swap_bootstrap(void) {
 
 	// TLB shootdown setup
 
-	ts_count = -1;
+	ts_count = -1;	// mark ready for shootdown
 
 	spinlock_init(&ts_splk);
 
@@ -128,6 +130,9 @@ void swap_bootstrap(void) {
 
 // *** Assumes the core map spinlock is held (and probably address space too)
 // Returns -1 if there are no pages that can be swapped out (kernel or busy)
+// Currently uses a sort of clock algorithm preferring not-recent, not-TLB entries,
+// but because it's self contained it could easily be substituted with something else
+// and switched in a config.
 static long choose_page_to_swap(void) {
 	unsigned long nchecked = 0;
 	while(nchecked < ncmes) {
@@ -183,7 +188,7 @@ void swap_copy_out(struct addrspace *as, unsigned long cmi) {
 	unsigned int swapi; 
 	
 	if(!cme->md.s_pres) {
-		int err = bitmap_alloc(swap_bitmap, &swapi);
+		int err = bitmap_alloc(swap_bitmap, &swapi);	// find a swap index
 		if(err != 0)
 			panic("Out of swap space :(\n");
 
@@ -193,7 +198,7 @@ void swap_copy_out(struct addrspace *as, unsigned long cmi) {
 		cme->md.swap = swapi;
 	}
 	else
-		swapi = cme->md.swap;
+		swapi = cme->md.swap;	// or use the one that already exists
 
 	spinlock_release(&core_map_splk);
 	spinlock_release(&as->addr_splk);
@@ -204,7 +209,7 @@ void swap_copy_out(struct addrspace *as, unsigned long cmi) {
 	struct uio uio;
 	uio_kinit(&iov, &uio, (void *) PADDR_TO_KVADDR(CMI_TO_PADDR(cmi)), PAGE_SIZE, swapi * PAGE_SIZE, UIO_WRITE);
 
-	int err = VOP_WRITE(swap_vnode, &uio);
+	int err = VOP_WRITE(swap_vnode, &uio);	// write out a copy to swap
 	if(err != 0)
 		panic("Write to swap failed\n");
 
@@ -231,7 +236,7 @@ void swap_out(unsigned long cmi, struct addrspace *other_as) {
 	KASSERT(cme->md.kernel == 0);
 	KASSERT(as != NULL);
 
-	cme->md.busy = 1;
+	cme->md.busy = 1;	// preserve atomicity across spinlock jumps
 	spinlock_release(&core_map_splk);
 	spinlock_release(&other_as->addr_splk);
 
@@ -258,15 +263,15 @@ void swap_out(unsigned long cmi, struct addrspace *other_as) {
 
 		const struct tlbshootdown ts = {TLBHI_VPAGE & cme->va, as};
 
-		ipi_broadcast_tlbshootdown(&ts);
+		ipi_broadcast_tlbshootdown(&ts);	// invalidate TLB before swapping out
 		cme->md.tlb = 0;
 
 		spinlock_acquire(&as->addr_splk);
 		spinlock_acquire(&core_map_splk);
 	}
 
-	if(cme->md.dirty || !cme->md.s_pres) {
-		swap_copy_out(as, cmi);
+	if(cme->md.dirty || !cme->md.s_pres) {	// we only need to do the write if there doesn't
+		swap_copy_out(as, cmi);				// already exist an identical copy in swap
 	}
 
 	KASSERT(cme->va != 0);
@@ -285,8 +290,8 @@ void swap_out(unsigned long cmi, struct addrspace *other_as) {
 	cme->md.busy = 1;
 
 	wchan_wakeall(as->addr_wchan, &as->addr_splk);
-	// now that the cme doesn't belong to that as,
-	// they'll be able to wake up
+	// now that the cme has no address space,
+	// sleepers will be able to wake up
 
 	spinlock_release(&core_map_splk);
 	spinlock_release(&as->addr_splk);
@@ -317,7 +322,7 @@ void swap_copy_in(struct addrspace *as, vaddr_t vaddr, unsigned long cmi) {
 	KASSERT(pte->p == 0);
 	KASSERT(pte->addr != 0);
 
-	cme->md.busy = 1;
+	cme->md.busy = 1;	// protect across spinlock jumps
 	pte->b = 1;
 
 	spinlock_release(&core_map_splk);
@@ -329,7 +334,7 @@ void swap_copy_in(struct addrspace *as, vaddr_t vaddr, unsigned long cmi) {
 	struct uio uio;
 	uio_kinit(&iov, &uio, (void *) PADDR_TO_KVADDR(CMI_TO_PADDR(cmi)), PAGE_SIZE, pte->addr * PAGE_SIZE, UIO_READ);
 
-	int err = VOP_READ(swap_vnode, &uio);
+	int err = VOP_READ(swap_vnode, &uio);	// copy in data from swap
 	if(err != 0)
 		panic("Read from swap failed\n");
 
@@ -344,12 +349,12 @@ void swap_copy_in(struct addrspace *as, vaddr_t vaddr, unsigned long cmi) {
 	cme->va = vaddr;
 	cme->as = as;
 	cme->md.all = 0;	// also sets busy to 0
-	cme->md.swap = pte->addr;
+	cme->md.swap = pte->addr;	// update the cme to reflect the copy in swap
 	cme->md.s_pres = 1;
 
 	KASSERT(cme->md.kernel == 0);
 
-	pte->addr = ADDR_TO_FRAME(CMI_TO_PADDR(cmi));
+	pte->addr = ADDR_TO_FRAME(CMI_TO_PADDR(cmi));	
 	pte->p = 1;
 	pte->b = 0;
 
@@ -364,8 +369,8 @@ void swap_in(struct addrspace *as, vaddr_t vaddr) {
 
 	long cmi = choose_page_to_swap();
 	if(cmi == -1) {
-		panic("Out of pages to swap :(\n");
-	}
+		panic("Out of pages to swap :(\n");	// this probably means the kernel has allocated
+	}										// too many page tables; not much we can do about that
 
 	KASSERT(core_map[cmi].md.kernel == 0);
 	KASSERT(core_map[cmi].md.busy == 0);
@@ -414,6 +419,7 @@ static union page_table_entry* get_pte(struct addrspace *as, vaddr_t vaddr, bool
 
 
 // *** Assumes the address space and core map spinlocks are held
+// Returns the index to an empty (or newly empty) core map entry
 static long find_cmi(struct addrspace *as) {
 	long i;
 	for(i = 0; i < (long) ncmes; i++) {
@@ -425,7 +431,7 @@ static long find_cmi(struct addrspace *as) {
 
 	i = choose_page_to_swap();
 	if(i < 0) {
-		panic("Out of swappable pages :(\n");
+		panic("Out of swappable pages :(\n");	// again, too many kernel pages
 	}
 
 	swap_out(i, as);
@@ -451,7 +457,7 @@ int alloc_upage(struct addrspace *as, vaddr_t vaddr, uint8_t perms, bool as_splk
 	union page_table_entry new_pte;
 	new_pte.all = 0;
 
-	if(perms == 0) {
+	if(perms == 0) {	// allow mappings outside heap/stack for as_define_region()
 		if(vaddr < as->heap_bottom || (vaddr >= as->heap_top && vaddr < USERSTACKBOTTOM) || vaddr >= USERSTACK)
 			return EINVAL;
 	}
@@ -477,7 +483,7 @@ int alloc_upage(struct addrspace *as, vaddr_t vaddr, uint8_t perms, bool as_splk
 	core_map[i].md.all = 0;
 	new_pte.p = 1;
 	new_pte.addr = ADDR_TO_FRAME(CMI_TO_PADDR(i));
-	bzero((void *) PADDR_TO_KVADDR(CMI_TO_PADDR(i)), PAGE_SIZE);
+	bzero((void *) PADDR_TO_KVADDR(CMI_TO_PADDR(i)), PAGE_SIZE);	// user pages must be zeroed
 	*pte = new_pte;
 
 	KASSERT(pte->addr != 0);
@@ -487,7 +493,7 @@ int alloc_upage(struct addrspace *as, vaddr_t vaddr, uint8_t perms, bool as_splk
 
 	spinlock_release(&core_map_splk);
 
-	if(!as_splk)
+	if(!as_splk)	// allows results to be protected by spinlock if so desired
 		spinlock_release(&as->addr_splk);
 	return 0;
 }
@@ -530,14 +536,14 @@ void free_upage(struct addrspace *as, vaddr_t vaddr, bool as_splk) {
 		KASSERT(core_map[i].md.busy == 0);
 		KASSERT(pte->b == 0);
 
-		if(core_map[i].md.tlb == 1) {
-			int result = tlb_probe(TLBHI_VPAGE & vaddr, 0);
-			if(result >= 0)
+		if(core_map[i].md.tlb == 1) {							// I don't think this case is in any of the tests,
+			int result = tlb_probe(TLBHI_VPAGE & vaddr, 0);		// but remove freed mappings from the TLB so attempts
+			if(result >= 0)										// to access them fail in the right way
 				tlb_write(TLBHI_INVALID(result), TLBLO_INVALID(), result);
 		}
 
-		bool s_pres = core_map[i].md.s_pres;
-		unsigned long swapi = core_map[i].md.swap;
+		bool s_pres = core_map[i].md.s_pres;		// keep these values stored temporarily
+		unsigned long swapi = core_map[i].md.swap;	// to make the spinlock hopping easier
 
 		core_map[i].va = 0;
 		core_map[i].as = NULL;
@@ -585,15 +591,15 @@ void free_upage(struct addrspace *as, vaddr_t vaddr, bool as_splk) {
 
 
 // *** Assumes no spinlocks are held
-// calls alloc_upage() multiple times with error handling
+// Calls alloc_upage() multiple times with error handling. Success is all or nothing.
 int alloc_upages(struct addrspace *as, vaddr_t vaddr, unsigned npages, uint8_t perms) {
 	spinlock_acquire(&as->addr_splk);
 
 	for(unsigned i = 0; i < npages; i++) {
 		int err = alloc_upage(as, vaddr + i * PAGE_SIZE, perms, true);
 		if(err != 0) {
-			for(unsigned j = 0; j < i; j++) {
-				free_upage(as, vaddr + i * PAGE_SIZE, true);
+			for(unsigned j = 0; j < i; j++) {					// if the whole allocation didn't work,
+				free_upage(as, vaddr + i * PAGE_SIZE, true);	// free the previously successful ones
 			}
 			spinlock_release(&as->addr_splk);
 			return err;
@@ -610,6 +616,10 @@ void free_upages(struct addrspace *as, vaddr_t vaddr, unsigned npages) {
 
 	struct page_table_directory *ptd = as->ptd;
 
+	// this semi-monstrosity of for loops iterates through an arbitrary region
+	// of virtual addresses, which might start and end partway through page tables
+	// (while including entire page tables in the middle)
+
 	unsigned long l1_start = L1INDEX(vaddr);
 	unsigned long l1_max = l1_start + ROUND_UP(npages, NUM_PTES);
 	for(unsigned long i = l1_start; i < l1_max; i++) {
@@ -622,7 +632,7 @@ void free_upages(struct addrspace *as, vaddr_t vaddr, unsigned npages) {
 			if(l2_max == 0)	// previous line doesn't work for ptd-aligned vaddrs
 				l2_max = NUM_PTES;
 
-			for(unsigned long j = l2_start; j < l2_max; j++) {
+			for(unsigned long j = l2_start; j < l2_max; j++) {	// only free_upage() pages that are allocated
 				if(pt->ptes[j].addr != 0)
 					free_upage(as, L12_TO_VADDR(i, j), true);	
 			}
@@ -631,7 +641,6 @@ void free_upages(struct addrspace *as, vaddr_t vaddr, unsigned npages) {
 				ptd->pts[i] = 0;
 			}
 		}
-
 	}
 
 	spinlock_release(&as->addr_splk);
@@ -639,11 +648,10 @@ void free_upages(struct addrspace *as, vaddr_t vaddr, unsigned npages) {
 
 
 // *** Assumes no spinlocks are held
+// Deep copies the contents of 'old' into 'new'
 void pth_copy(struct addrspace *old, struct addrspace *new) {
 
 	spinlock_acquire(&old->addr_splk);
-	// We don't need to acquire new's spinlock because once we put a copied entry into the
-	// core map (so swap functions might now try to access it), we never touch its PTE again
 
 	struct page_table_directory *old_ptd = old->ptd;
 
@@ -733,6 +741,8 @@ void pth_copy(struct addrspace *old, struct addrspace *new) {
 }
 
 
+// Handle a readonly fault (which in OS161 just manages the dirty bit since
+// permissions aren't actually supported)
 int perms_fault(struct addrspace *as, vaddr_t faultaddress) {
 	spinlock_acquire(&as->addr_splk);
 
@@ -809,8 +819,7 @@ static unsigned long choose_tlb_entry() {
 
 		old_cmi = PADDR_TO_CMI(oldentrylo & TLBLO_PPAGE);
 
-	} while (core_map[old_cmi].md.busy);	// it's a pain to replace TLB entries in the middle of swap,
-											// and because there are max 32 cpus, max 32 TLB entries can be busy
+	} while (core_map[old_cmi].md.busy);	// avoid busy entries - more trouble than they're worth
 
 	if(old_cmi != 0) {
 		core_map[old_cmi].md.tlb = 0;
@@ -821,6 +830,7 @@ static unsigned long choose_tlb_entry() {
 }
 
 
+// Handle read and write faults
 int tlb_miss(struct addrspace *as, vaddr_t faultaddress) {
 	spinlock_acquire(&as->addr_splk);
 
@@ -861,23 +871,26 @@ int tlb_miss(struct addrspace *as, vaddr_t faultaddress) {
 	return 0;
 }
 
+
+// Invalidate all entries in this cpu's TLB
+// Used in as_activate()
 void invalidate_tlb(void) {
 	for(unsigned i = 0; i < NUM_TLB; i++)
 		tlb_write(TLBHI_INVALID(i), TLBLO_INVALID(), i);
 }
 
 
+// Respond to an ipi_tlbshootdown
 void vm_tlbshootdown(const struct tlbshootdown *ts) {
 	int result = tlb_probe(ts->oldentryhi, 0);
-	if(result >= 0)
+	if(result >= 0)	// shoot down the TLB entry
 		tlb_write(TLBHI_INVALID(result), TLBLO_INVALID(), result);
 
 	spinlock_acquire(&ts_splk);
 
 	ts_count--;
-	if(ts_count == 0) {
+	if(ts_count == 0)	// if you're the last to respond, wake up the signaler
 		wchan_wakeall(ts_wchan, &ts_splk);
-	}
 
 	spinlock_release(&ts_splk);
 }

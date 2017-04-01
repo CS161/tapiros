@@ -87,7 +87,7 @@ as_copy(struct addrspace *old, struct addrspace **ret)
 		return ENOMEM;
 	}
 
-	pth_copy(old, new);
+	pth_copy(old, new);	// deep copy the address space
 	new->heap_bottom = old->heap_bottom;
 	new->heap_top = old->heap_top;
 
@@ -98,9 +98,10 @@ as_copy(struct addrspace *old, struct addrspace **ret)
 void
 as_destroy(struct addrspace *as)
 {
-	free_upages(as, 0, USERSPACETOP / PAGE_SIZE);
-	kfree(as->ptd);
+	free_upages(as, 0, USERSPACETOP / PAGE_SIZE);	// free all pages in user space
+	kfree(as->ptd);	// free the page directory itself
 
+	// at this point, no other threads can reach 'as'
 	spinlock_cleanup(&as->addr_splk);
 	wchan_destroy(as->addr_wchan);
 	kfree(as);
@@ -120,7 +121,7 @@ as_activate(void)
 		return;
 	}
 
-	invalidate_tlb();
+	invalidate_tlb();	// flush mappings from another address space
 }
 
 void
@@ -150,11 +151,12 @@ as_define_region(struct addrspace *as, vaddr_t vaddr, size_t memsize,
 	(void) executable;
 
 	vaddr &= PAGE_FRAME;
-	uint8_t perms = 1;
+	uint8_t perms = 1;		// tells alloc_upages to allow allocations outside of heap/stack
 
-	unsigned npages = ROUND_UP(memsize, PAGE_SIZE);
+	unsigned npages = ROUND_UP(memsize, PAGE_SIZE);	// permissions have to be at page granularity,
+													// and you can't round down for obvious reasons
 
-	if(vaddr + npages * PAGE_SIZE > USERSTACKBOTTOM - USERHEAPSIZE)
+	if(vaddr + npages * PAGE_SIZE > USERSTACKBOTTOM - USERHEAPSIZE)	// disallow mappings that infringe on the heap
 		return EINVAL;
 
 	int err = alloc_upages(as, vaddr, npages, perms);
