@@ -52,7 +52,7 @@ static void mat_daemon(void *a, unsigned long b) {
 					goto next;
 				}
 
-				spinlock_acquire(&core_map_splk);	// do a little dance to keep the cme synchronized
+				spinlock_release(&core_map_splk);	// do a little dance to keep the cme synchronized
 				core_map[i].md.busy = 1;			// and prevent deadlock
 				spinlock_acquire(&as->addr_splk);	
 				spinlock_acquire(&core_map_splk);
