@@ -622,10 +622,8 @@ static const char *mainmenu[] = {
 	"[?t] Tests menu                     ",
 #if OPT_SYNCHPROBS
 	"[sp1] Whale Mating                  ",
-#if 0
-	"[sp2] Cat/mouse                     ",
-	"[sp3] Stoplight                     ",
-#endif
+	"[sp2] Elves                         ",
+	"[sp3] Airballoon                    ",
 #endif
 	"[kh] Kernel heap stats              ",
 	"[khgen] Next kernel heap generation ",
@@ -681,10 +679,8 @@ static struct {
 #if OPT_SYNCHPROBS
 	/* in-kernel synchronization problem(s) */
 	{ "sp1",	whalemating },
-#if 0
-	{ "sp2",	catmouse },
-	{ "sp3",	stoplight },
-#endif
+	{ "sp2",	elves },
+	{ "sp3",	airballoon },
 #endif
 
 	/* stats */
