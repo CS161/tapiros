@@ -76,4 +76,15 @@ int sys_waitpid(pid_t pid, int *status, int *retval);
 void sys__exit(int exitcode, int codetype);
 int sys_sbrk(intptr_t amount, int *retval);
 
+int sys_sync(void);
+int sys_mkdir(userptr_t path, mode_t mode);
+int sys_rmdir(userptr_t path);
+int sys_remove(userptr_t path);
+int sys_link(userptr_t oldpath, userptr_t newpath);
+int sys_rename(userptr_t oldpath, userptr_t newpath);
+int sys_getdirentry(int fd, userptr_t buf, size_t buflen, int *retval);
+int sys_fstat(int fd, userptr_t statptr);
+int sys_fsync(int fd);
+int sys_ftruncate(int fd, off_t len);
+
 #endif /* _SYSCALL_H_ */
