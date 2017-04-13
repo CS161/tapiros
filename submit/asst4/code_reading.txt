@@ -1,0 +1,247 @@
+Code-Reading Questions
+
+1 ---------------------------------------------------------------------------
+
+When sys_remove is called on a file that’s open in another process, it is only unlinked, not reclaimed, so that other process will have normal read/write access to that file until it is closed (and the file will exist somewhere until all file descriptors to it are closed).
+
+2 ---------------------------------------------------------------------------
+
+VOP_ instructions are macros for sfs_ functions, so that’s as low as we need to go for this one. VOP_DECREF() actually isn’t an sfs function but does VOP_RECLAIM (sfs_reclaim()) when refcount reaches 0.
+
+Indentation matters, so hopefully the formatting works. The code reading questions are at the end of our design doc too, which should be easier to read since it's a pdf.
+
+a -------------------------------------------
+
+sys_open()
+	vfs_open()
+		{
+			vfs_lookparent()
+				VOP_LOOKPARENT()
+				VOP_DECREF()
+			VOP_CREAT()
+			VOP_DECREF()
+		} or {
+			vfs_lookup()
+				VOP_LOOKUP()
+				VOP_DECREF()
+		}
+		VOP_EACHOPEN()
+		{
+			VOP_DECREF()
+		} or {
+			VOP_TRUNCATE()
+			VOP_DECREF()
+		}
+
+The meat of this function is either VOP_CREAT() or VOP_LOOKUP(), depending on input
+
+b -------------------------------------------
+
+sys_write()
+	VOP_WRITE()
+	VOP_ISSEEKABLE()
+
+c -------------------------------------------
+
+sys_mkdir()
+	vfs_mkdir()
+		vfs_lookparent()
+			VOP_LOOKPARENT()
+			VOP_DECREF()
+		VOP_MKDIR()
+		VOP_DECREF()
+
+3 ---------------------------------------------------------------------------
+
+Error handling calls are omitted.
+
+a -------------------------------------------
+
+The relevant sfs call here is sfs_creat().
+sfs_creat() opens a file that already exists, or creates a new one at the specified path and opens it.
+
+sfs_creat()
+	reserve_buffers()
+	sfs_dinode_load()
+		buffer_read()
+	sfs_dinode_map()
+		buffer_map()
+	sfs_dinode_unload()
+		buffer_release()
+	sfs_dir_findname()
+		sfs_dir_nentries()
+			sfs_dinode_load()
+				buffer_read()
+			sfs_dinode_map()
+				buffer_map()
+			sfs_dinode_unload()
+				buffer_release()
+		sfs_readdir()
+			sfs_metaio()
+				sfs_dinode_load()
+					buffer_read()
+				sfs_dinode_map()
+					buffer_map()
+				sfs_bmap()
+					sfs_get_indirection()
+					sfs_dinode_load()
+					sfs_blockobj_init_inode()
+				buffer_read()
+				buffer_map()
+				sometimes buffer_mark_dirty()
+				sometimes sfs_dinode_mark_dirty()
+					buffer_mark_dirty()
+
+	{
+		sfs_loadvnode()
+			buffer_read()
+			buffer_map()
+			sometimes buffer_mark_dirty()
+			sfs_vnode_create()
+			buffer_release()
+		unreserve_buffers()
+	} or {
+		sfs_makeobj()
+			sfs_balloc()
+				sfs_clearblock()
+					buffer_get()
+					buffer_map()
+					buffer_mark_valid()
+					buffer_mark_dirty()
+					sometimes buffer_release()
+			sfs_loadvnode()
+				see above
+			sfs_dinode_load()
+				buffer_read()
+			sfs_dinode_map()
+				buffer_map()
+		sfs_dinode_map()
+			buffer_map()
+		sfs_dir_link()
+			sfs_dir_findname()
+				see above
+			sfs_writedir
+				sfs_metaio()
+					see above
+		sfs_dinode_mark_dirty()
+			buffer_mark_dirty()
+		sfs_dinode_unload()
+			buffer_release()
+		unreserve_buffers()
+	}
+
+b -------------------------------------------
+
+sfs_write()
+	reserve_buffers()
+	sfs_io()
+		sfs_dinode_load()
+			buffer_read()
+		sfs_dinode_map()
+			buffer_map()
+		sometimes sfs_partialio()
+			sfs_bmap()
+				sfs_get_indirection()
+				sfs_dinode_load()
+					buffer_read()
+				sfs_blockobj_init_inode()
+				sfs_bmap_subtree()
+					sfs_bmap_get()
+					buffer_read()
+					etc.; it’s a loop
+				sfs_blockobj_cleanup()
+				sfs_dinode_unload()
+					buffer_release()
+			buffer_read()
+			buffer_map()
+			buffer_mark_dirty()
+			buffer_release()
+		sfs_blockio()
+			sfs_bmap()
+				see above
+			buffer_get()
+			buffer_map()
+			buffer_mark_valid()
+			buffer_mark_dirty()
+			buffer_release()
+		sometimes sfs_partialio()
+			see above
+		sometimes sfs_dinode_mark_dirty()
+			buffer_mark_dirty()
+	unreserve_buffers()
+
+c -------------------------------------------
+
+sfs_mkdir()
+	reserve_buffers()
+	sfs_dinode_load()
+		buffer_read()
+	sfs_dinode_map()
+		buffer_map()
+	sfs_dir_findname()
+		see above
+	sfs_makeobj()
+		see above
+	3x sfs_dir_link()
+		see above
+	2x sfs_dinode_mark_dirty()
+		buffer_mark_dirty()
+	2x sfs_dinode_unload()
+		buffer_release()
+	unreserve_buffers()
+
+4 ---------------------------------------------------------------------------
+
+sfs_mkdir() calls some buffer functions repeatedly, so I assume this question is just asking us to trace through reserve_buffers(), buffer_read(), buffer_map(), buffer_mark_dirty(), buffer_release(), and unreserve_buffers().
+
+reserve_buffers()
+	registers intent to use buffers for a file system operation
+
+buffer_read()
+	wraps buffer_read_internal() with buffer_lock
+		buffer_get_internal()
+			finds existing buffer, or makes a new one and attaches it
+		buffer_readin()
+			reads contents from disk into buffer with FSOP_READBLOCK
+		buffer_release_internal()
+marks buffer no longer busy
+
+buffer_map()
+	returns pointer to buffer data
+
+buffer_mark_dirty()
+	marks the buffer as dirty
+
+buffer_release()
+	wraps buffer_release_internal() with buffer_lock
+		marks buffer no longer busy, detaches metadata
+		buffer is put on the end of the LRU list, from where it will eventually be written to disk with FSOP_WRITEBLOCK
+
+unreserve_buffers()
+	releases buffer reservation
+
+5 ---------------------------------------------------------------------------
+
+a. safe, done in sfs_reclaim()
+b. safe, done in sfs_reclaim()
+c. unsafe because getting a buffer can trigger a buffer eviction, which can trigger the journal
+d. safe, we see in sfs_mkdir() that locks are acquired parent > child
+e. unsafe for same reason as d)
+
+6 ---------------------------------------------------------------------------
+
+sfsck can fix directories with illegal sizes, nameless file entries, fileless name entries, etc.
+sfsck can’t fix directories without ‘.’ or ‘..’ entries
+sfsck also can’t fix a lot of problems with journal placement/bounds
+sfsck also can’t fix filesystems that aren’t SFS (don’t have its magic number)—who’d’ve guessed?
+
+7 -------------------------------------------------------------------------- 
+
+- If the system tries to append to a file, and the block allocation succeeds but the system crashes before the initial write goes through to disk, the user would have access to whatever data was last stored in that physical sector—however, our pass for stale data in recovery with checksums eliminates this problem
+
+- If there’s a transaction that commits, but some of the in-place writes to metadata hadn’t gone through yet at the time of the crash, you’ll have a state that reflects some but not all changes and is thus inconsistent (e.g. the block freemap reflects that a file has been truncated, but the file’s size does not). The redo pass addresses this problem by making sure that all journaled records have their operations reflected on disk.
+
+- If there’s a transaction that hasn’t been committed, but some of its records are written to the journal (i.e. the system crashes while it’s ensuring write-ahead), the undo pass makes sure these changes aren’t reflected on disk (because we don’t have the complete transaction and transactions are atomic, we must make it as if the transaction never began)
+
+- If the system crashes and there are logged operations on pages that were metadata at the time but have since been made user data (e.g. we modify a file’s inode, unlink/reclaim that file, then an append to a file is placed in that physical page where the inode used to be), we have to make sure that our redo operations won’t corrupt the user data (we don’t have stored undo records for user data because we do record journaling, not block journaling). We solve this with our first pass in recovery by checking for sectors where this is the case, then later confirm each sector is still metadata before redoing operations on it
+
