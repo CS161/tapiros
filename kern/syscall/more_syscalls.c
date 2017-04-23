@@ -45,8 +45,6 @@
 #include <copyinout.h>
 #include <vfs.h>
 #include <vnode.h>
-#include <openfile.h>
-#include <filetable.h>
 #include <syscall.h>
 
 /*
@@ -284,49 +282,45 @@ sys_rename(userptr_t oldpath, userptr_t newpath)
 int
 sys_getdirentry(int fd, userptr_t buf, size_t buflen, int *retval)
 {
+	if(fd < 0 || fd >= OPEN_MAX || CUR_FDS(fd) < 0)		// invalid fd
+		return EBADF;
+
 	struct iovec iov;
 	struct uio useruio;
-	struct openfile *file;
 	int err;
 
 	/* better be a valid file descriptor */
 
-	err = filetable_get(curproc->p_filetable, fd, &file);
-	if (err) {
-		return err;
+	struct vfile *file = VFILES(CUR_FDS(fd));
+	if(file == NULL) {
+		return EBADF;
 	}
 
 	/* all directories should be seekable */
-	KASSERT(VOP_ISSEEKABLE(file->of_vnode));
+	KASSERT(VOP_ISSEEKABLE(file->vf_vnode));
 
-	lock_acquire(file->of_offsetlock);
-
-	/* of_accmode should have only the O_ACCMODE bits in it */
-	KASSERT((file->of_accmode & O_ACCMODE) == file->of_accmode);
+	spinlock_acquire(&file->vf_lock);
 
 	/* Dirs shouldn't be openable for write at all, but be safe... */
-	if (file->of_accmode == O_WRONLY) {
-		lock_release(file->of_offsetlock);
-		filetable_put(curproc->p_filetable, fd, file);
+	if ((file->vf_flags & O_ACCMODE) == O_WRONLY) {
+		spinlock_release(&file->vf_lock);
 		return EBADF;
 	}
 
 	/* set up a uio with the buffer, its size, and the current offset */
-	uio_uinit(&iov, &useruio, buf, buflen, file->of_offset, UIO_READ);
+	uio_uinit(&iov, &useruio, buf, buflen, file->vf_offset, UIO_READ);
 
 	/* do the read */
-	err = VOP_GETDIRENTRY(file->of_vnode, &useruio);
+	err = VOP_GETDIRENTRY(file->vf_vnode, &useruio);
 	if (err) {
-		lock_release(file->of_offsetlock);
-		filetable_put(curproc->p_filetable, fd, file);
+		spinlock_release(&file->vf_lock);
 		return err;
 	}
 
 	/* set the offset to the updated offset in the uio */
-	file->of_offset = useruio.uio_offset;
+	file->vf_offset = useruio.uio_offset;
 
-	lock_release(file->of_offsetlock);
-	filetable_put(curproc->p_filetable, fd, file);
+	spinlock_release(&file->vf_lock);
 
 	/*
 	 * the amount read is the size of the buffer originally, minus
@@ -344,13 +338,15 @@ sys_getdirentry(int fd, userptr_t buf, size_t buflen, int *retval)
 int
 sys_fstat(int fd, userptr_t statptr)
 {
+	if(fd < 0 || fd >= OPEN_MAX || CUR_FDS(fd) < 0)		// invalid fd
+		return EBADF;
+
 	struct stat kbuf;
-	struct openfile *file;
 	int err;
 
-	err = filetable_get(curproc->p_filetable, fd, &file);
-	if (err) {
-		return err;
+	struct vfile *file = VFILES(CUR_FDS(fd));
+	if(file == NULL) {
+		return EBADF;
 	}
 
 	/*
@@ -358,12 +354,10 @@ sys_fstat(int fd, userptr_t statptr)
 	 * and we're not using any of its non-constant fields.
 	 */
 
-	err = VOP_STAT(file->of_vnode, &kbuf);
+	err = VOP_STAT(file->vf_vnode, &kbuf);
 	if (err) {
-		filetable_put(curproc->p_filetable, fd, file);
 		return err;
 	}
-	filetable_put(curproc->p_filetable, fd, file);
 
 	return copyout(&kbuf, statptr, sizeof(struct stat));
 }
@@ -374,12 +368,14 @@ sys_fstat(int fd, userptr_t statptr)
 int
 sys_fsync(int fd)
 {
-	struct openfile *file;
+	if(fd < 0 || fd >= OPEN_MAX || CUR_FDS(fd) < 0)		// invalid fd
+		return EBADF;
+
 	int err;
 
-	err = filetable_get(curproc->p_filetable, fd, &file);
-	if (err) {
-		return err;
+	struct vfile *file = VFILES(CUR_FDS(fd));
+	if(file == NULL) {
+		return EBADF;
 	}
 
 	/*
@@ -387,8 +383,7 @@ sys_fsync(int fd)
 	 * and we're not using any of its non-constant fields.
 	 */
 
-	err = VOP_FSYNC(file->of_vnode);
-	filetable_put(curproc->p_filetable, fd, file);
+	err = VOP_FSYNC(file->vf_vnode);
 	return err;
 }
 
@@ -398,23 +393,21 @@ sys_fsync(int fd)
 int
 sys_ftruncate(int fd, off_t len)
 {
-	struct openfile *file;
+	if(fd < 0 || fd >= OPEN_MAX || CUR_FDS(fd) < 0)		// invalid fd
+		return EBADF;
+	
 	int err;
 
 	if (len < 0) {
 		return EINVAL;
 	}
 
-	err = filetable_get(curproc->p_filetable, fd, &file);
-	if (err) {
-		return err;
+	struct vfile *file = VFILES(CUR_FDS(fd));
+	if(file == NULL) {
+		return EBADF;
 	}
 
-	/* of_accmode should have only the O_ACCMODE bits in it */
-	KASSERT((file->of_accmode & O_ACCMODE) == file->of_accmode);
-
-	if (file->of_accmode == O_RDONLY) {
-		filetable_put(curproc->p_filetable, fd, file);
+	if ((file->vf_flags & O_ACCMODE) == O_RDONLY) {
 		return EBADF;
 	}
 
@@ -423,7 +416,6 @@ sys_ftruncate(int fd, off_t len)
 	 * and we're not using any of its non-constant fields.
 	 */
 
-	err = VOP_TRUNCATE(file->of_vnode, len);
-	filetable_put(curproc->p_filetable, fd, file);
+	err = VOP_TRUNCATE(file->vf_vnode, len);
 	return err;
 }
