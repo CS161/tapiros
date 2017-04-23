@@ -1151,6 +1151,7 @@ sfs_rename(struct vnode *absdir1, const char *name1,
 	struct sfs_direntry sd;
 	int found_dir1;
 	bool must_unlock_freemap = false;
+	struct vnode *must_decref_vnode = NULL;
 
 	/* make gcc happy */
 	obj2_inodeptr = NULL;
@@ -1498,7 +1499,14 @@ sfs_rename(struct vnode *absdir1, const char *name1,
 		sfs_dinode_unload(obj2);
 
 		lock_release(obj2->sv_lock);
-		VOP_DECREF(&obj2->sv_absvn);
+
+		if (must_unlock_freemap) {
+			/* Can't decref it until after we unlock the freemap */
+			must_decref_vnode = &obj2->sv_absvn;
+		}
+		else {
+			VOP_DECREF(&obj2->sv_absvn);
+		}
 		obj2 = NULL;
 	}
 
@@ -1585,6 +1593,9 @@ sfs_rename(struct vnode *absdir1, const char *name1,
  out4:
 	if (must_unlock_freemap) {
 		sfs_unlock_freemap(sfs);
+	}
+	if (must_decref_vnode) {
+		VOP_DECREF(must_decref_vnode);
 	}
  	sfs_dinode_unload(dir1);
  out3:
