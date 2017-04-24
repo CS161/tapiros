@@ -80,6 +80,12 @@ struct sfs_fs {
 	struct sfs_jphys *sfs_jphys;	/* physical journal container */
 };
 
+struct transaction {
+	uint64_t lsn;		// log sequence number
+	uint8_t nbufs;		// number of associated unflushed buffers
+	bool txend;			// true if TXEND has been issued
+};
+
 /*
  * Function for mounting a sfs (calls vfs_mount)
  */

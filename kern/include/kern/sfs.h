@@ -142,18 +142,79 @@ struct sfs_direntry {
 #define SFS_JPHYS_CLIENT	1
 
 /* container-level record types (allowable range 0-127) */
-#define SFS_JPHYS_INVALID	0		/* No record here */
-#define SFS_JPHYS_PAD		1		/* Padding */
-#define SFS_JPHYS_TRIM		2		/* Log trim record */
+#define SFS_JPHYS_INVALID	0		// No record here
+#define SFS_JPHYS_PAD		1		// Padding
+#define SFS_JPHYS_TRIM		2		// Log trim record
+#define SFS_JPHYS_TXEND		3		// Transaction end
+#define SFS_JPHYS_ALLOCB	4		// Block allocation
+#define SFS_JPHYS_FREEB		5		// Block free
+#define SFS_JPHYS_WRITEB	6		// User write
+#define SFS_JPHYS_WRITE16	7		// 16 bit metadata write
+#define SFS_JPHYS_WRITE32	8		// 32 bit metadata write
+#define SFS_JPHYS_WRITEM	9		// Large metadata write
+#define SFS_JPHYS_WRITEDIR	10		// Directory write
 
 /* The record header */
 struct sfs_jphys_header {
-	uint64_t jh_coninfo;			/* Container info */
+	uint64_t jh_coninfo;			// container info
 };
 
 /* Contents for SFS_JPHYS_TRIM */
 struct sfs_jphys_trim {
-	uint64_t jt_taillsn;			/* Tail LSN */
+	uint64_t jt_taillsn;			// tail LSN
+};
+
+/* Contents for SFS_JPHYS_TXEND */
+struct sfs_jphys_txend {
+	uint8_t type;					// transaction type (for debugging)
+};
+
+/* Contents for SFS_JPHYS_ALLOCB */
+struct sfs_jphys_allocb {
+	daddr_t index;					// index in block freemap
+};
+
+/* Contents for SFS_JPHYS_FREEB */
+struct sfs_jphys_freeb {
+	daddr_t index;					// index in block freemap
+};
+
+/* Contents for SFS_JPHYS_WRITEB */
+struct sfs_jphys_writeb {
+	uint64_t checksum;				// checksum for stale writes
+	daddr_t index;					// disk address
+};
+
+/* Contents for SFS_JPHYS_WRITE16 */
+struct sfs_jphys_write16 {
+	daddr_t index;					// disk address
+	uint16_t old;					// old 16-bit value
+	uint16_t new;					// new 16-bit value
+	uint16_t offset;				// offset in sector
+};
+
+/* Contents for SFS_JPHYS_WRITE32 */
+struct sfs_jphys_write32 {
+	daddr_t index;					// disk address
+	uint32_t old;					// old 32-bit value
+	uint32_t new;					// new 32-bit value
+	uint16_t offset;				// offset in sector
+};
+
+/* Contents for SFS_JPHYS_WRITEM */
+struct sfs_jphys_writem {
+	daddr_t index;					// disk address
+	uint16_t offset;				// offset in sector
+	char old[249];					// old metadata chunk
+	char new[249];					// new metadata chunk
+};
+
+/* Contents for SFS_JPHYS_WRITEDIR */
+struct sfs_jphys_writedir {
+	daddr_t index;					// disk address
+	uint32_t slot;					// slot in directory
+	struct sfs_direntry old;		// old directory entry
+	struct sfs_direntry new;		// new directory entry
 };
 
 
