@@ -80,11 +80,27 @@ struct sfs_fs {
 	struct sfs_jphys *sfs_jphys;	/* physical journal container */
 };
 
-struct transaction {
+struct tx {
+	struct sfs_fs *sfs;	// associated file system
 	uint64_t lsn;		// log sequence number
 	uint8_t nbufs;		// number of associated unflushed buffers
 	bool txend;			// true if TXEND has been issued
 };
+
+#include <array.h>
+
+/*
+ * Array of txs.
+ */
+#ifndef VFSINLINE
+#define VFSINLINE INLINE
+#endif
+
+DECLARRAY(tx, VFSINLINE);
+DEFARRAY(tx, VFSINLINE);
+
+struct txarray *txs;			// global transaction table
+struct lock *tx_lock;	// lock to protect transaction table
 
 /*
  * Function for mounting a sfs (calls vfs_mount)

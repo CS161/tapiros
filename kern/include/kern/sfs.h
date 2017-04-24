@@ -145,14 +145,27 @@ struct sfs_direntry {
 #define SFS_JPHYS_INVALID	0		// No record here
 #define SFS_JPHYS_PAD		1		// Padding
 #define SFS_JPHYS_TRIM		2		// Log trim record
-#define SFS_JPHYS_TXEND		3		// Transaction end
-#define SFS_JPHYS_ALLOCB	4		// Block allocation
-#define SFS_JPHYS_FREEB		5		// Block free
-#define SFS_JPHYS_WRITEB	6		// User write
-#define SFS_JPHYS_WRITE16	7		// 16 bit metadata write
-#define SFS_JPHYS_WRITE32	8		// 32 bit metadata write
-#define SFS_JPHYS_WRITEM	9		// Large metadata write
-#define SFS_JPHYS_WRITEDIR	10		// Directory write
+#define SFS_JPHYS_TXSTART	3		// Transaction start (for debugging)
+#define SFS_JPHYS_TXEND		4		// Transaction end
+#define SFS_JPHYS_ALLOCB	5		// Block allocation
+#define SFS_JPHYS_FREEB		6		// Block free
+#define SFS_JPHYS_WRITEB	7		// User write
+#define SFS_JPHYS_WRITE16	8		// 16 bit metadata write
+#define SFS_JPHYS_WRITE32	9		// 32 bit metadata write
+#define SFS_JPHYS_WRITEM	10		// Large metadata write
+#define SFS_JPHYS_WRITEDIR	11		// Directory write
+
+/* symbolic names for debugging transaction type codes */
+#define SFS_JPHYS_DIR_UNLINK	1	// sfs_dir_unlink()
+#define SFS_JPHYS_RECLAIM		2	// sfs_reclaim()
+#define SFS_JPHYS_WRITE 		3	// sfs_write()
+#define SFS_JPHYS_TRUNCATE		4	// sfs_truncate
+#define SFS_JPHYS_CREAT			5	// sfs_creat()
+#define SFS_JPHYS_MKDIR			6	// sfs_mkdir()
+#define SFS_JPHYS_LINK 			7	// sfs_link()
+#define SFS_JPHYS_RMDIR			8	// sfs_rmdir()
+#define SFS_JPHYS_RENAME		9	// sfs_rename()
+
 
 /* The record header */
 struct sfs_jphys_header {

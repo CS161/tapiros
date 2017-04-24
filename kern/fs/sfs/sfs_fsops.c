@@ -655,5 +655,16 @@ sfs_domount(void *options, struct device *dev, struct fs **ret)
 int
 sfs_mount(const char *device)
 {
+	if(txs == NULL) {
+		txs = txarray_create();		// create global sfs transaction struct
+		if(txs == NULL) {
+			panic("txarray_create for txs failed\n");
+		}
+
+		tx_lock = lock_create("txs");
+		if (tx_lock==NULL) {
+			panic("sfs_mount: Could not create tx_lock\n");
+		}
+	}
 	return vfs_mount(device, NULL, sfs_domount);
 }

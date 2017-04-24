@@ -43,6 +43,7 @@
 #include <fs.h>
 #include <vnode.h>
 #include <device.h>
+#include <sfs.h>
 
 
 /*
@@ -107,6 +108,8 @@ vfs_bootstrap(void)
 	if (knowndevs_lock==NULL) {
 		panic("vfs: Could not create knowndevs lock\n");
 	}
+
+	txs = NULL;
 
 	vfs_initbootfs();
 	devnull_create();
