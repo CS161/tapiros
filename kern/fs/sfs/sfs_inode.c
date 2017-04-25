@@ -250,6 +250,7 @@ sfs_reclaim(struct vnode *v)
 		result = sfs_itrunc(sv, 0);
 		if (result) {
 			sfs_dinode_unload(sv);
+			sfs_unlock_freemap(sfs);
 			lock_release(sfs->sfs_vnlock);
 			lock_release(sv->sv_lock);
 			if (buffers_needed) {
