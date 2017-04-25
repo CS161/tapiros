@@ -448,7 +448,40 @@ dump_client_record(uint32_t myblock, unsigned myoffset, uint64_t mylsn,
 			break;
 		}
 		case SFS_JPHYS_TXEND: {
-			printf("TXEND\n");
+			struct sfs_jphys_tx rec;
+
+			copyandzero(&rec, sizeof(rec), data, len);
+			printf("TXEND ");
+			switch (rec.type) {
+				case SFS_JPHYS_DIR_UNLINK:
+					printf("DIR_UNLINK ");
+					break;
+				case SFS_JPHYS_RECLAIM:
+					printf("RECLAIM ");
+					break;
+				case SFS_JPHYS_WRITE:
+					printf("WRITE ");
+					break;
+				case SFS_JPHYS_TRUNCATE:
+					printf("TRUNCATE ");
+					break;
+				case SFS_JPHYS_CREAT:
+					printf("CREAT ");
+					break;
+				case SFS_JPHYS_MKDIR:
+					printf("MKDIR ");
+					break;
+				case SFS_JPHYS_LINK:
+					printf("LINK ");
+					break;
+				case SFS_JPHYS_RMDIR:
+					printf("RMDIR ");
+					break;
+				case SFS_JPHYS_RENAME:
+					printf("RENAME ");
+					break;
+			}
+			printf("-> tid: %llu\n", (unsigned long long) rec.tid);
 			break;
 		}
 		case SFS_JPHYS_ALLOCB: {
