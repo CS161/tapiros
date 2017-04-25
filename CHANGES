@@ -14,6 +14,11 @@ various other people, all of whom are (hopefully) listed below.
 OS/161 2.0.4 not released yet
 ------------------------------
 
+20170425 dholland in sfs-jphys, from Noah Golowich
+   - initialize jp_firstlsns properly in sfs_jphys_loadup; otherwise a
+     flushall before writing any records causes sfs_jphys_flush to
+     overrun onto the head journal block and assert.
+
 20170425 dholland in sfs-jphys, from Michael Colavita
    - Fix missing sfs_unlock_freemap on error paths in reclaim.
 
