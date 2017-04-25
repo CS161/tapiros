@@ -2214,9 +2214,18 @@ sfs_jphys_stopwriting(struct sfs_fs *sfs)
 	lock_release(jp->jp_lock);
 }
 
+void sfs_txcreate(struct sfs_fs *sfs, sfs_lsn_t newlsn, struct sfs_jphys_writecontext *ctx) {
+	(void) sfs;
+	(void) newlsn;
+	(void) ctx;
+	return;
+}
+
 void sfs_txstart(struct sfs_fs *sfs, uint8_t type) {
 	(void) sfs;
 	(void) type;
+	struct sfs_jphys_tx rec = {type};
+	sfs_jphys_write(sfs, sfs_txcreate, NULL, SFS_JPHYS_TXSTART, &rec, sizeof(struct sfs_jphys_tx));
 	return;
 }
 

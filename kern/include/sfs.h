@@ -82,7 +82,7 @@ struct sfs_fs {
 
 struct tx {
 	struct sfs_fs *sfs;	// associated file system
-	uint64_t lsn;		// log sequence number
+	uint64_t tid;		// transaction id
 	uint8_t nbufs;		// number of associated unflushed buffers
 	bool txend;			// true if TXEND has been issued
 };

@@ -179,7 +179,7 @@ struct sfs_jphys_trim {
 
 /* Contents for SFS_JPHYS_TXSTART or SFS_JPHYS_TXEND */
 struct sfs_jphys_tx {
-	uint8_t type;					// transaction type (for debugging)
+	uint16_t type;					// transaction type (for debugging)
 };
 
 /* Contents for SFS_JPHYS_FREEB */
@@ -213,8 +213,8 @@ struct sfs_jphys_write32 {
 struct sfs_jphys_writem {
 	daddr_t index;					// disk address
 	uint16_t offset;				// offset in sector
-	char old[249];					// old metadata chunk
-	char new[249];					// new metadata chunk
+	char old[128];					// old metadata chunk
+	char new[128];					// new metadata chunk
 };
 
 /* Contents for SFS_JPHYS_WRITEDIR */

@@ -36,6 +36,7 @@
 
 /* get uint32_t and friends */
 #include <stdint.h>
+#include <sys/types.h>
 
 /* get the additional compat stuff shared with mksfs */
 #include "support.h"

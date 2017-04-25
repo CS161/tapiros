@@ -336,12 +336,12 @@ dump_container_record(uint32_t myblock, unsigned myoffset, uint64_t mylsn,
 
 	    /* container-level records */
 	    case SFS_JPHYS_INVALID:
-		/* XXX: hexdump the contents */
-		printf("... invalid\n");
-		break;
+			/* XXX: hexdump the contents */
+			printf("... invalid\n");
+			break;
 	    case SFS_JPHYS_PAD:
-		printf("[pad %zu]\n", len);
-		break;
+			printf("[pad %zu]\n", len);
+			break;
 	    case SFS_JPHYS_TRIM:
 		{
 			struct sfs_jphys_trim jt;
@@ -350,10 +350,46 @@ dump_container_record(uint32_t myblock, unsigned myoffset, uint64_t mylsn,
 			printf("TRIM -> %llu\n",
 			       (unsigned long long)SWAP64(jt.jt_taillsn));
 		}
-		break;
+			break;
+		case SFS_JPHYS_TXSTART: {
+			printf("TXSTART\n");
+			break;
+		}
+		case SFS_JPHYS_TXEND: {
+			printf("TXEND\n");
+			break;
+		}
+		case SFS_JPHYS_ALLOCB: {
+			printf("ALLOCB\n");
+			break;
+		}
+		case SFS_JPHYS_FREEB: {
+			printf("FREEB\n");
+			break;
+		}
+		case SFS_JPHYS_WRITEB: {
+			printf("WRITEB\n");
+			break;
+		}
+		case SFS_JPHYS_WRITE16: {
+			printf("WRITE16\n");
+			break;
+		}
+		case SFS_JPHYS_WRITE32: {
+			printf("WRITE32\n");
+			break;
+		}
+		case SFS_JPHYS_WRITEM: {
+			printf("WRITEM\n");
+			break;
+		}
+		case SFS_JPHYS_WRITEDIR: {
+			printf("WRITEDIR\n");
+			break;
+		}
 	    default:
-		/* XXX hexdump it */
-		printf("Unknown record type %u\n", type);
+			/* XXX hexdump it */
+			printf("Unknown record type %u\n", type);
 		break;
 	}
 }
@@ -376,7 +412,42 @@ dump_client_record(uint32_t myblock, unsigned myoffset, uint64_t mylsn,
 		 */
 		(void)data;
 		(void)len;
-
+		case SFS_JPHYS_TXSTART: {
+			printf("TXSTART\n");
+			break;
+		}
+		case SFS_JPHYS_TXEND: {
+			printf("TXEND\n");
+			break;
+		}
+		case SFS_JPHYS_ALLOCB: {
+			printf("ALLOCB\n");
+			break;
+		}
+		case SFS_JPHYS_FREEB: {
+			printf("FREEB\n");
+			break;
+		}
+		case SFS_JPHYS_WRITEB: {
+			printf("WRITEB\n");
+			break;
+		}
+		case SFS_JPHYS_WRITE16: {
+			printf("WRITE16\n");
+			break;
+		}
+		case SFS_JPHYS_WRITE32: {
+			printf("WRITE32\n");
+			break;
+		}
+		case SFS_JPHYS_WRITEM: {
+			printf("WRITEM\n");
+			break;
+		}
+		case SFS_JPHYS_WRITEDIR: {
+			printf("WRITEDIR\n");
+			break;
+		}
 	    default:
 		/* XXX hexdump it */
 		printf("Unknown record type %u\n", type);

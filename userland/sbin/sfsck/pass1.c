@@ -35,6 +35,7 @@
 #include <err.h>
 
 #include "compat.h"
+#include <sys/types.h>
 #include <kern/sfs.h>
 
 #include "disk.h"
