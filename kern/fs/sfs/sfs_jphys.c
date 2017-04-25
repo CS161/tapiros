@@ -2215,22 +2215,32 @@ sfs_jphys_stopwriting(struct sfs_fs *sfs)
 }
 
 void sfs_txcreate(struct sfs_fs *sfs, sfs_lsn_t newlsn, struct sfs_jphys_writecontext *ctx) {
-	(void) sfs;
-	(void) newlsn;
 	(void) ctx;
+
+	struct tx *tx = kmalloc(sizeof(struct tx));
+	tx->sfs = sfs;
+	tx->tid = newlsn;
+	tx->nbufs = 0;
+	tx->txend = false;
+
+	lock_acquire(tx_lock);
+	int err = txarray_add(txs, tx, NULL);
+	if(err != 0)
+		panic("Too many active transactions");
+	lock_release(tx_lock);
+
+	curproc->tx = tx;
 	return;
 }
 
 void sfs_txstart(struct sfs_fs *sfs, uint8_t type) {
-	(void) sfs;
-	(void) type;
-	struct sfs_jphys_tx rec = {type};
+	struct sfs_jphys_tx rec = {0, type};
 	sfs_jphys_write(sfs, sfs_txcreate, NULL, SFS_JPHYS_TXSTART, &rec, sizeof(struct sfs_jphys_tx));
 	return;
 }
 
 void sfs_txend(struct sfs_fs *sfs, uint8_t type) {
-	(void) sfs;
-	(void) type;
+	struct sfs_jphys_tx rec = {curproc->tx->tid, type};
+	sfs_jphys_write(sfs, sfs_txcreate, NULL, SFS_JPHYS_TXEND, &rec, sizeof(struct sfs_jphys_tx));
 	return;
 }

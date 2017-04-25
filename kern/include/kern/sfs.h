@@ -179,22 +179,26 @@ struct sfs_jphys_trim {
 
 /* Contents for SFS_JPHYS_TXSTART or SFS_JPHYS_TXEND */
 struct sfs_jphys_tx {
+	uint64_t tid;					// transaction id
 	uint16_t type;					// transaction type (for debugging)
 };
 
 /* Contents for SFS_JPHYS_FREEB */
 struct sfs_jphys_block {
+	uint64_t tid;					// transaction id
 	daddr_t index;					// index in block freemap
 };
 
 /* Contents for SFS_JPHYS_WRITEB */
 struct sfs_jphys_writeb {
+	uint64_t tid;					// transaction id
 	uint64_t checksum;				// checksum for stale writes
 	daddr_t index;					// disk address
 };
 
 /* Contents for SFS_JPHYS_WRITE16 */
 struct sfs_jphys_write16 {
+	uint64_t tid;					// transaction id
 	daddr_t index;					// disk address
 	uint16_t old;					// old 16-bit value
 	uint16_t new;					// new 16-bit value
@@ -203,6 +207,7 @@ struct sfs_jphys_write16 {
 
 /* Contents for SFS_JPHYS_WRITE32 */
 struct sfs_jphys_write32 {
+	uint64_t tid;					// transaction id
 	daddr_t index;					// disk address
 	uint32_t old;					// old 32-bit value
 	uint32_t new;					// new 32-bit value
@@ -211,6 +216,7 @@ struct sfs_jphys_write32 {
 
 /* Contents for SFS_JPHYS_WRITEM */
 struct sfs_jphys_writem {
+	uint64_t tid;					// transaction id
 	daddr_t index;					// disk address
 	uint16_t offset;				// offset in sector
 	char old[128];					// old metadata chunk
@@ -219,6 +225,7 @@ struct sfs_jphys_writem {
 
 /* Contents for SFS_JPHYS_WRITEDIR */
 struct sfs_jphys_writedir {
+	uint64_t tid;					// transaction id
 	daddr_t index;					// disk address
 	uint32_t slot;					// slot in directory
 	struct sfs_direntry old;		// old directory entry
