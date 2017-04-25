@@ -11,6 +11,12 @@ various other people, all of whom are (hopefully) listed below.
 
 ------------------------------------------------------------
 
+OS/161 2.0.4 not released yet
+------------------------------
+
+20170425 dholland in sfs-jphys, from Michael Colavita
+   - Fix missing sfs_unlock_freemap on error paths in reclaim.
+
 
 OS/161 2.0.3 released 20160124
 ------------------------------
