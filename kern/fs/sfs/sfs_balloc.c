@@ -112,6 +112,10 @@ sfs_balloc(struct sfs_fs *sfs, daddr_t *diskblock, struct buf **bufret)
 		sfs->sfs_freemapdirty = true;
 		lock_release(sfs->sfs_freemaplock);
 	}
+
+	struct sfs_jphys_block rec = {curproc->tx->tid, *diskblock};
+	sfs_jphys_write(sfs, NULL, NULL, SFS_JPHYS_ALLOCB, &rec, sizeof(struct sfs_jphys_block));
+
 	return result;
 }
 
@@ -140,6 +144,9 @@ sfs_bfree_prelocked(struct sfs_fs *sfs, daddr_t diskblock)
 
 	bitmap_unmark(sfs->sfs_freemap, diskblock);
 	sfs->sfs_freemapdirty = true;
+
+	struct sfs_jphys_block rec = {curproc->tx->tid, diskblock};
+	sfs_jphys_write(sfs, NULL, NULL, SFS_JPHYS_FREEB, &rec, sizeof(struct sfs_jphys_block));
 }
 
 /*

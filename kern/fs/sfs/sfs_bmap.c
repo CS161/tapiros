@@ -333,33 +333,56 @@ sfs_blockobj_set(struct sfs_blockobj *bo, uint32_t offset, uint32_t newval)
 		indirlevel = bo->bo_inode.i_subtree.str_indirlevel;
 		indirnum = bo->bo_inode.i_subtree.str_indirnum;
 
+		struct sfs_jphys_write32 rec = {curproc->tx->tid, sv->sv_ino, 0, newval, 0};
+
 		switch (indirlevel) {
 		    case 0:
-			KASSERT(indirnum < SFS_NDIRECT);
-			dino->sfi_direct[indirnum] = newval;
-			break;
+				KASSERT(indirnum < SFS_NDIRECT);
+
+				rec.old = dino->sfi_direct[indirnum];
+				rec.offset = (void *)&dino->sfi_direct[indirnum] - (void *)dino;
+
+				dino->sfi_direct[indirnum] = newval;
+				break;
 		    case 1:
-			KASSERT(indirnum == 0);
-			dino->sfi_indirect = newval;
-			break;
+				KASSERT(indirnum == 0);
+
+				rec.old = dino->sfi_indirect;
+				rec.offset = (void *)&dino->sfi_indirect - (void *)dino;
+
+				dino->sfi_indirect = newval;
+				break;
 		    case 2:
-			KASSERT(indirnum == 0);
-			dino->sfi_dindirect = newval;
-			break;
+				KASSERT(indirnum == 0);
+
+				rec.old = dino->sfi_dindirect;
+				rec.offset = (void *)&dino->sfi_dindirect - (void *)dino;
+
+				dino->sfi_dindirect = newval;
+				break;
 		    case 3:
-			KASSERT(indirnum == 0);
-			dino->sfi_tindirect = newval;
-			break;
+				KASSERT(indirnum == 0);
+
+				rec.old = dino->sfi_tindirect;
+				rec.offset = (void *)&dino->sfi_tindirect - (void *)dino;
+
+				dino->sfi_tindirect = newval;
+				break;
 		    default:
-			panic("sfs: %s: sfs_blockobj_get: "
-			      "invalid indirection %u\n",
-			      sfs->sfs_sb.sb_volname,
-			      indirlevel);
+				panic("sfs: %s: sfs_blockobj_get: "
+				      "invalid indirection %u\n",
+				      sfs->sfs_sb.sb_volname,
+				      indirlevel);
 		}
 		sfs_dinode_mark_dirty(bo->bo_inode.i_sv);
+
+		sfs_jphys_write(sfs, NULL, NULL, SFS_JPHYS_WRITE32, &rec, sizeof(struct sfs_jphys_write32));
 	}
 	else {
 		uint32_t *idptr;
+
+		// FINISH LATER with buffer metadata
+		//struct sfs_jphys_write32 rec = {curproc->tx->tid, sv->sv_ino, 0, newval, offset};
 
 		COMPILE_ASSERT(SFS_DBPERIDB*sizeof(idptr[0]) == SFS_BLOCKSIZE);
 		KASSERT(offset < SFS_DBPERIDB);
@@ -367,6 +390,9 @@ sfs_blockobj_set(struct sfs_blockobj *bo, uint32_t offset, uint32_t newval)
 		idptr = buffer_map(bo->bo_idblock.id_buf);
 		idptr[offset] = newval;
 		buffer_mark_dirty(bo->bo_idblock.id_buf);
+
+		// FINISH LATER with buffer metadata
+		// sfs_jphys_write(sfs, NULL, NULL, SFS_JPHYS_WRITE32, &rec, sizeof(struct sfs_jphys_write32));
 	}
 }
 

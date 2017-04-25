@@ -88,6 +88,8 @@ struct tx {
 };
 
 #include <array.h>
+#include <proc.h>
+#include <current.h>
 
 /*
  * Array of txs.
