@@ -2213,3 +2213,15 @@ sfs_jphys_stopwriting(struct sfs_fs *sfs)
 	jp->jp_writermode = false;
 	lock_release(jp->jp_lock);
 }
+
+void sfs_txstart(struct sfs_fs *sfs, uint8_t type) {
+	(void) sfs;
+	(void) type;
+	return;
+}
+
+void sfs_txend(struct sfs_fs *sfs, uint8_t type) {
+	(void) sfs;
+	(void) type;
+	return;
+}

@@ -161,5 +161,7 @@ int sfs_jphys_startwriting(struct sfs_fs *sfs);
 void sfs_jphys_unstartwriting(struct sfs_fs *sfs);
 void sfs_jphys_stopwriting(struct sfs_fs *sfs);
 
+void sfs_txstart(struct sfs_fs *sfs, uint8_t type);
+void sfs_txend(struct sfs_fs *sfs, uint8_t type);
 
 #endif /* _SFSPRIVATE_H_ */

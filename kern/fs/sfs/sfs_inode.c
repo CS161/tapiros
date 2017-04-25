@@ -244,6 +244,8 @@ sfs_reclaim(struct vnode *v)
 	}
 	iptr = sfs_dinode_map(sv);
 
+	sfs_txstart(sfs, SFS_JPHYS_RECLAIM);
+
 	/* If there are no on-disk references to the file either, erase it. */
 	if (iptr->sfi_linkcount == 0) {
 		sfs_lock_freemap(sfs);
@@ -252,9 +254,12 @@ sfs_reclaim(struct vnode *v)
 			sfs_dinode_unload(sv);
 			lock_release(sfs->sfs_vnlock);
 			lock_release(sv->sv_lock);
+
+			sfs_txend(sfs, SFS_JPHYS_RECLAIM);
 			if (buffers_needed) {
 				unreserve_buffers(SFS_BLOCKSIZE);
 			}
+
 			return result;
 		}
 		sfs_dinode_unload(sv);
@@ -267,6 +272,7 @@ sfs_reclaim(struct vnode *v)
 		sfs_dinode_unload(sv);
 	}
 
+	sfs_txend(sfs, SFS_JPHYS_RECLAIM);
 	if (buffers_needed) {
 		unreserve_buffers(SFS_BLOCKSIZE);
 	}

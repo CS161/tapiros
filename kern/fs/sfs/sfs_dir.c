@@ -287,6 +287,8 @@ sfs_dir_unlink(struct sfs_vnode *sv, int slot)
 {
 	struct sfs_direntry sd;
 
+	sfs_txstart(sv->sv_absvn.vn_fs->fs_data, SFS_JPHYS_DIR_UNLINK);
+
 	KASSERT(lock_do_i_hold(sv->sv_lock));
 
 	/* Initialize a suitable directory entry... */
@@ -294,7 +296,11 @@ sfs_dir_unlink(struct sfs_vnode *sv, int slot)
 	sd.sfd_ino = SFS_NOINO;
 
 	/* ... and write it */
-	return sfs_writedir(sv, slot, &sd);
+	int ret = sfs_writedir(sv, slot, &sd);
+
+	sfs_txend(sv->sv_absvn.vn_fs->fs_data, SFS_JPHYS_DIR_UNLINK);
+	
+	return ret;
 }
 
 /*

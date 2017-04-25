@@ -177,18 +177,13 @@ struct sfs_jphys_trim {
 	uint64_t jt_taillsn;			// tail LSN
 };
 
-/* Contents for SFS_JPHYS_TXEND */
-struct sfs_jphys_txend {
+/* Contents for SFS_JPHYS_TXSTART or SFS_JPHYS_TXEND */
+struct sfs_jphys_tx {
 	uint8_t type;					// transaction type (for debugging)
 };
 
-/* Contents for SFS_JPHYS_ALLOCB */
-struct sfs_jphys_allocb {
-	daddr_t index;					// index in block freemap
-};
-
 /* Contents for SFS_JPHYS_FREEB */
-struct sfs_jphys_freeb {
+struct sfs_jphys_block {
 	daddr_t index;					// index in block freemap
 };
 

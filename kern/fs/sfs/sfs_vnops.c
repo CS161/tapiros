@@ -178,6 +178,8 @@ sfs_write(struct vnode *v, struct uio *uio)
 	struct sfs_vnode *sv = v->vn_data;
 	int result;
 
+	sfs_txstart(v->vn_fs->fs_data, SFS_JPHYS_WRITE);
+
 	KASSERT(uio->uio_rw==UIO_WRITE);
 
 	reserve_buffers(SFS_BLOCKSIZE);
@@ -186,6 +188,8 @@ sfs_write(struct vnode *v, struct uio *uio)
 	result = sfs_io(sv, uio);
 
 	lock_release(sv->sv_lock);
+
+	sfs_txend(v->vn_fs->fs_data, SFS_JPHYS_WRITE);
 	unreserve_buffers(SFS_BLOCKSIZE);
 
 	return result;
@@ -418,6 +422,8 @@ sfs_truncate(struct vnode *v, off_t len)
 	struct sfs_vnode *sv = v->vn_data;
 	int result;
 
+	sfs_txstart(sfs, SFS_JPHYS_TRUNCATE);
+
 	reserve_buffers(SFS_BLOCKSIZE);
 	lock_acquire(sv->sv_lock);
 	sfs_lock_freemap(sfs);
@@ -426,7 +432,10 @@ sfs_truncate(struct vnode *v, off_t len)
 
 	sfs_unlock_freemap(sfs);
 	lock_release(sv->sv_lock);
+
+	sfs_txend(sfs, SFS_JPHYS_TRUNCATE);
 	unreserve_buffers(SFS_BLOCKSIZE);
+
 	return result;
 }
 
@@ -634,11 +643,16 @@ sfs_creat(struct vnode *v, const char *name, bool excl, mode_t mode,
 		return 0;
 	}
 
+	sfs_txstart(sfs, SFS_JPHYS_CREAT);
+
 	/* Didn't exist - create it */
 	result = sfs_makeobj(sfs, SFS_TYPE_FILE, &newguy);
 	if (result) {
 		lock_release(sv->sv_lock);
+
+		sfs_txend(sfs, SFS_JPHYS_CREAT);
 		unreserve_buffers(SFS_BLOCKSIZE);
+
 		return result;
 	}
 
@@ -655,7 +669,10 @@ sfs_creat(struct vnode *v, const char *name, bool excl, mode_t mode,
 		lock_release(newguy->sv_lock);
 		VOP_DECREF(&newguy->sv_absvn);
 		lock_release(sv->sv_lock);
+
+		sfs_txend(sfs, SFS_JPHYS_CREAT);
 		unreserve_buffers(SFS_BLOCKSIZE);
+
 		return result;
 	}
 
@@ -670,7 +687,10 @@ sfs_creat(struct vnode *v, const char *name, bool excl, mode_t mode,
 	sfs_dinode_unload(newguy);
 	lock_release(newguy->sv_lock);
 	lock_release(sv->sv_lock);
+
+	sfs_txend(sfs, SFS_JPHYS_CREAT);
 	unreserve_buffers(SFS_BLOCKSIZE);
+
 	return 0;
 }
 
@@ -716,13 +736,18 @@ sfs_link(struct vnode *dir, const char *name, struct vnode *file)
 		return result;
 	}
 
+	sfs_txstart(dir->vn_fs->fs_data, SFS_JPHYS_LINK);
+
 	/* Create the link */
 	result = sfs_dir_link(sv, name, f->sv_ino, NULL);
 	if (result) {
 		sfs_dinode_unload(f);
 		lock_release(f->sv_lock);
 		lock_release(sv->sv_lock);
+
+		sfs_txend(dir->vn_fs->fs_data, SFS_JPHYS_LINK);
 		unreserve_buffers(SFS_BLOCKSIZE);
+
 		return result;
 	}
 
@@ -734,7 +759,10 @@ sfs_link(struct vnode *dir, const char *name, struct vnode *file)
 	sfs_dinode_unload(f);
 	lock_release(f->sv_lock);
 	lock_release(sv->sv_lock);
+
+	sfs_txend(dir->vn_fs->fs_data, SFS_JPHYS_LINK);
 	unreserve_buffers(SFS_BLOCKSIZE);
+
 	return 0;
 }
 
@@ -800,6 +828,8 @@ sfs_mkdir(struct vnode *v, const char *name, mode_t mode)
 		      sfs->sfs_sb.sb_volname, name, sv->sv_ino);
 	}
 
+	sfs_txstart(sfs, SFS_JPHYS_MKDIR);
+
 	result = sfs_makeobj(sfs, SFS_TYPE_DIR, &newguy);
 	if (result) {
 		goto die_simple;
@@ -842,6 +872,8 @@ sfs_mkdir(struct vnode *v, const char *name, mode_t mode)
 	lock_release(sv->sv_lock);
 	VOP_DECREF(&newguy->sv_absvn);
 
+
+	sfs_txend(sfs, SFS_JPHYS_MKDIR);
 	unreserve_buffers(SFS_BLOCKSIZE);
 
 	KASSERT(result==0);
@@ -854,6 +886,7 @@ die_uncreate:
 
 die_simple:
 	sfs_dinode_unload(sv);
+	sfs_txend(sfs, SFS_JPHYS_MKDIR);
 
 die_early:
 	lock_release(sv->sv_lock);
@@ -910,6 +943,9 @@ sfs_rmdir(struct vnode *v, const char *name)
 	if (result) {
 		goto die_loadvictim;
 	}
+
+	sfs_txstart(sfs, SFS_JPHYS_RMDIR);
+
 	victim_inodeptr = sfs_dinode_map(victim);
 
 	if (victim->sv_ino == SFS_ROOTDIR_INO) {
@@ -961,6 +997,7 @@ sfs_rmdir(struct vnode *v, const char *name)
 
 die_total:
 	sfs_dinode_unload(victim);
+	sfs_txend(sfs, SFS_JPHYS_RMDIR);
 die_loadvictim:
 	lock_release(victim->sv_lock);
  	VOP_DECREF(&victim->sv_absvn);
@@ -1437,6 +1474,8 @@ sfs_rename(struct vnode *absdir1, const char *name1,
 	 * the operation.
 	 */
 
+	sfs_txstart(sfs, SFS_JPHYS_RENAME);
+
 	/* At this point we should have valid slots in both dirs. */
 	KASSERT(slot1>=0);
 	KASSERT(slot2>=0);
@@ -1598,6 +1637,7 @@ sfs_rename(struct vnode *absdir1, const char *name1,
 		VOP_DECREF(must_decref_vnode);
 	}
  	sfs_dinode_unload(dir1);
+ 	sfs_txend(sfs, SFS_JPHYS_RENAME);
  out3:
  	sfs_dinode_unload(dir2);
  out2:
