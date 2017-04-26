@@ -252,6 +252,12 @@ sfs_partialio(struct sfs_vnode *sv, struct uio *uio,
 	 * If it was a write, mark the modified block dirty.
 	 */
 	if (uio->uio_rw == UIO_WRITE) {
+
+		struct sfs_jphys_writeb rec = {curproc->tx->tid, 		// txid
+									   sfs_checksum(ioptr), 	// checksum
+									   diskblock};				// daddr
+		sfs_jphys_write(sfs, NULL, NULL, SFS_JPHYS_WRITEB, &rec, sizeof(rec));
+
 		buffer_mark_dirty(iobuffer);
 	}
 
@@ -323,6 +329,11 @@ sfs_blockio(struct sfs_vnode *sv, struct uio *uio)
 	}
 
 	if (uio->uio_rw == UIO_WRITE) {
+		struct sfs_jphys_writeb rec = {curproc->tx->tid, 		// txid
+									   sfs_checksum(ioptr), 	// checksum
+									   diskblock};				// daddr
+		sfs_jphys_write(sfs, NULL, NULL, SFS_JPHYS_WRITEB, &rec, sizeof(rec));
+
 		buffer_mark_valid(iobuf);
 		buffer_mark_dirty(iobuf);
 	}

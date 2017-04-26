@@ -2215,30 +2215,29 @@ sfs_jphys_stopwriting(struct sfs_fs *sfs)
 	lock_release(jp->jp_lock);
 }
 
-void sfs_txcallback(struct sfs_fs *sfs, sfs_lsn_t newlsn, struct sfs_jphys_writecontext *ctx) {
+void sfs_txstartcb(struct sfs_fs *sfs, sfs_lsn_t newlsn, struct sfs_jphys_writecontext *ctx) {
 	(void) ctx;
 
-	if(curproc->tx == NULL) {	// txstart
+	struct tx *tx = kmalloc(sizeof(struct tx));
+	tx->sfs = sfs;
+	tx->tid = newlsn;
+	tx->nbufs = 0;
+	tx->txend = false;
 
-		struct tx *tx = kmalloc(sizeof(struct tx));
-		tx->sfs = sfs;
-		tx->tid = newlsn;
-		tx->nbufs = 0;
-		tx->txend = false;
+	lock_acquire(tx_lock);
+	int err = txarray_add(txs, tx, NULL);
+	if(err != 0)
+		panic("Too many active transactions");
+	lock_release(tx_lock);
 
-		lock_acquire(tx_lock);
-		int err = txarray_add(txs, tx, NULL);
-		if(err != 0)
-			panic("Too many active transactions");
-		lock_release(tx_lock);
+	curproc->tx = tx;
 
-		curproc->tx = tx;
+	return;
+}
 
-	}
-	else {		// txend
-		curproc->tx = NULL;
-	}
-
+void sfs_txendcb(struct sfs_fs *sfs, sfs_lsn_t newlsn, struct sfs_jphys_writecontext *ctx) {
+	(void) ctx;
+	curproc->tx = NULL;
 	return;
 }
 
@@ -2247,7 +2246,7 @@ void sfs_txstart(struct sfs_fs *sfs, uint8_t type) {
 	KASSERT(curproc->tx == NULL);
 
 	struct sfs_jphys_tx rec = {0, type};
-	sfs_jphys_write(sfs, sfs_txcallback, NULL, SFS_JPHYS_TXSTART, &rec, sizeof(struct sfs_jphys_tx));
+	sfs_jphys_write(sfs, sfs_txstartcb, NULL, SFS_JPHYS_TXSTART, &rec, sizeof(rec));
 	return;
 }
 
@@ -2256,6 +2255,12 @@ void sfs_txend(struct sfs_fs *sfs, uint8_t type) {
 	KASSERT(curproc->tx != NULL);
 
 	struct sfs_jphys_tx rec = {curproc->tx->tid, type};
-	sfs_jphys_write(sfs, sfs_txcallback, NULL, SFS_JPHYS_TXEND, &rec, sizeof(struct sfs_jphys_tx));
+	sfs_jphys_write(sfs, sfs_txendcb, NULL, SFS_JPHYS_TXEND, &rec, sizeof(rec));
 	return;
+}
+
+// *** buf is 512 bytes long
+uint64_t sfs_checksum(const char *buf) {
+	(void) buf;
+	return 0;
 }
