@@ -449,8 +449,8 @@ dump_client_record(uint32_t myblock, unsigned myoffset, uint64_t mylsn,
 		}
 		case SFS_JPHYS_TXEND: {
 			struct sfs_jphys_tx rec;
-
 			copyandzero(&rec, sizeof(rec), data, len);
+
 			printf("TXEND ");
 			switch (rec.type) {
 				case SFS_JPHYS_DIR_UNLINK:
@@ -485,31 +485,77 @@ dump_client_record(uint32_t myblock, unsigned myoffset, uint64_t mylsn,
 			break;
 		}
 		case SFS_JPHYS_ALLOCB: {
-			printf("ALLOCB\n");
+			struct sfs_jphys_block rec;
+			copyandzero(&rec, sizeof(rec), data, len);
+
+			printf("ALLOCB -> tid: %llu, index: %lu\n",
+					(unsigned long long) rec.tid, 
+					(unsigned long) rec.index);
 			break;
 		}
 		case SFS_JPHYS_FREEB: {
-			printf("FREEB\n");
+			struct sfs_jphys_block rec;
+			copyandzero(&rec, sizeof(rec), data, len);
+
+			printf("FREEB -> tid: %llu, index: %lu\n",
+					(unsigned long long) rec.tid, 
+					(unsigned long) rec.index);
 			break;
 		}
 		case SFS_JPHYS_WRITEB: {
-			printf("WRITEB\n");
+			struct sfs_jphys_writeb rec;
+			copyandzero(&rec, sizeof(rec), data, len);
+
+			printf("FREEB -> tid: %llu, index: %lu, checksum: %llu\n",
+					(unsigned long long) rec.tid, 
+					(unsigned long) rec.index,
+					(unsigned long long) rec.checksum);
 			break;
 		}
 		case SFS_JPHYS_WRITE16: {
-			printf("WRITE16\n");
+			struct sfs_jphys_write16 rec;
+			copyandzero(&rec, sizeof(rec), data, len);
+	
+			printf("WRITE16 -> tid: %llu, index: %lu, old: %u, new: %u, offset: %u\n",
+					(unsigned long long) rec.tid, 
+					(unsigned long) rec.index,
+					(unsigned) rec.old,
+					(unsigned) rec.new,
+					(unsigned) rec.offset);
 			break;
 		}
 		case SFS_JPHYS_WRITE32: {
-			printf("WRITE32\n");
+			struct sfs_jphys_write32 rec;
+			copyandzero(&rec, sizeof(rec), data, len);
+
+			printf("WRITE32 -> tid: %llu, index: %lu, old: %lu, new: %lu, offset: %u\n",
+					(unsigned long long) rec.tid, 
+					(unsigned long) rec.index,
+					(unsigned long) rec.old,
+					(unsigned long) rec.new,
+					(unsigned) rec.offset);
 			break;
 		}
 		case SFS_JPHYS_WRITEM: {
-			printf("WRITEM\n");
+			struct sfs_jphys_writem rec;
+			copyandzero(&rec, sizeof(rec), data, len);
+
+			printf("WRITEM -> tid: %llu, index: %lu, offset: %u\nold: %s\nnew: %s\n",
+					(unsigned long long) rec.tid, 
+					(unsigned long) rec.index,
+					(unsigned) rec.offset,
+					rec.old, 
+					rec.new);
 			break;
 		}
 		case SFS_JPHYS_WRITEDIR: {
-			printf("WRITEDIR\n");
+			struct sfs_jphys_writedir rec;
+			copyandzero(&rec, sizeof(rec), data, len);
+
+			printf("WRITEDIR -> tid: %llu, index: %lu, slot: %lu\n",
+					(unsigned long long) rec.tid, 
+					(unsigned long) rec.index,
+					(unsigned long) rec.slot);
 			break;
 		}
 	    default:

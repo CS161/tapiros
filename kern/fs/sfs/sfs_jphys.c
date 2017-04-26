@@ -2215,35 +2215,47 @@ sfs_jphys_stopwriting(struct sfs_fs *sfs)
 	lock_release(jp->jp_lock);
 }
 
-void sfs_txcreate(struct sfs_fs *sfs, sfs_lsn_t newlsn, struct sfs_jphys_writecontext *ctx) {
+void sfs_txcallback(struct sfs_fs *sfs, sfs_lsn_t newlsn, struct sfs_jphys_writecontext *ctx) {
 	(void) ctx;
 
-	struct tx *tx = kmalloc(sizeof(struct tx));
-	tx->sfs = sfs;
-	tx->tid = newlsn;
-	tx->nbufs = 0;
-	tx->txend = false;
+	if(curproc->tx == NULL) {	// txstart
 
-	lock_acquire(tx_lock);
-	int err = txarray_add(txs, tx, NULL);
-	if(err != 0)
-		panic("Too many active transactions");
-	lock_release(tx_lock);
+		struct tx *tx = kmalloc(sizeof(struct tx));
+		tx->sfs = sfs;
+		tx->tid = newlsn;
+		tx->nbufs = 0;
+		tx->txend = false;
 
-	curproc->tx = tx;
+		lock_acquire(tx_lock);
+		int err = txarray_add(txs, tx, NULL);
+		if(err != 0)
+			panic("Too many active transactions");
+		lock_release(tx_lock);
+
+		curproc->tx = tx;
+
+	}
+	else {		// txend
+		curproc->tx = NULL;
+	}
+
 	return;
 }
 
+// *** Transactions cannot be nested. Enforce in the calling function.
 void sfs_txstart(struct sfs_fs *sfs, uint8_t type) {
+	KASSERT(curproc->tx == NULL);
+
 	struct sfs_jphys_tx rec = {0, type};
-	sfs_jphys_write(sfs, sfs_txcreate, NULL, SFS_JPHYS_TXSTART, &rec, sizeof(struct sfs_jphys_tx));
+	sfs_jphys_write(sfs, sfs_txcallback, NULL, SFS_JPHYS_TXSTART, &rec, sizeof(struct sfs_jphys_tx));
 	return;
 }
 
+// *** Transactions cannot be nested. Enforce in the calling function.
 void sfs_txend(struct sfs_fs *sfs, uint8_t type) {
-	struct sfs_jphys_tx rec = {curproc->tx->tid, type};
-	sfs_jphys_write(sfs, sfs_txcreate, NULL, SFS_JPHYS_TXEND, &rec, sizeof(struct sfs_jphys_tx));
+	KASSERT(curproc->tx != NULL);
 
-	curproc->tx = NULL;
+	struct sfs_jphys_tx rec = {curproc->tx->tid, type};
+	sfs_jphys_write(sfs, sfs_txcallback, NULL, SFS_JPHYS_TXEND, &rec, sizeof(struct sfs_jphys_tx));
 	return;
 }

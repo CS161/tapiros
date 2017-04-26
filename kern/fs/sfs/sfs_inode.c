@@ -244,7 +244,11 @@ sfs_reclaim(struct vnode *v)
 	}
 	iptr = sfs_dinode_map(sv);
 
-	sfs_txstart(sfs, SFS_JPHYS_RECLAIM);
+	bool nested = true;
+	if(curproc->tx == NULL) {	// don't nest transactions
+		sfs_txstart(sfs, SFS_JPHYS_RECLAIM);
+		nested = false;
+	}
 
 	/* If there are no on-disk references to the file either, erase it. */
 	if (iptr->sfi_linkcount == 0) {
@@ -256,7 +260,9 @@ sfs_reclaim(struct vnode *v)
 			lock_release(sfs->sfs_vnlock);
 			lock_release(sv->sv_lock);
 
-			sfs_txend(sfs, SFS_JPHYS_RECLAIM);
+			if(!nested) {
+				sfs_txend(sfs, SFS_JPHYS_RECLAIM);
+			}
 			if (buffers_needed) {
 				unreserve_buffers(SFS_BLOCKSIZE);
 			}
@@ -273,7 +279,9 @@ sfs_reclaim(struct vnode *v)
 		sfs_dinode_unload(sv);
 	}
 
-	sfs_txend(sfs, SFS_JPHYS_RECLAIM);
+	if(!nested) {
+		sfs_txend(sfs, SFS_JPHYS_RECLAIM);
+	}
 	if (buffers_needed) {
 		unreserve_buffers(SFS_BLOCKSIZE);
 	}

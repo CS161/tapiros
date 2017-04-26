@@ -287,7 +287,11 @@ sfs_dir_unlink(struct sfs_vnode *sv, int slot)
 {
 	struct sfs_direntry sd;
 
-	sfs_txstart(sv->sv_absvn.vn_fs->fs_data, SFS_JPHYS_DIR_UNLINK);
+	bool nested = true;
+	if(curproc->tx == NULL) {	// don't nest transactions
+		sfs_txstart(sv->sv_absvn.vn_fs->fs_data, SFS_JPHYS_DIR_UNLINK);
+		nested = false;
+	}
 
 	KASSERT(lock_do_i_hold(sv->sv_lock));
 
@@ -298,8 +302,10 @@ sfs_dir_unlink(struct sfs_vnode *sv, int slot)
 	/* ... and write it */
 	int ret = sfs_writedir(sv, slot, &sd);
 
-	sfs_txend(sv->sv_absvn.vn_fs->fs_data, SFS_JPHYS_DIR_UNLINK);
-	
+	if(!nested) {
+		sfs_txend(sv->sv_absvn.vn_fs->fs_data, SFS_JPHYS_DIR_UNLINK);
+	}
+
 	return ret;
 }
 

@@ -178,7 +178,11 @@ sfs_write(struct vnode *v, struct uio *uio)
 	struct sfs_vnode *sv = v->vn_data;
 	int result;
 
-	sfs_txstart(v->vn_fs->fs_data, SFS_JPHYS_WRITE);
+	bool nested = true;
+	if(curproc->tx == NULL) {
+		sfs_txstart(v->vn_fs->fs_data, SFS_JPHYS_WRITE);
+		nested = false;
+	}
 
 	KASSERT(uio->uio_rw==UIO_WRITE);
 
@@ -189,7 +193,9 @@ sfs_write(struct vnode *v, struct uio *uio)
 
 	lock_release(sv->sv_lock);
 
-	sfs_txend(v->vn_fs->fs_data, SFS_JPHYS_WRITE);
+	if(!nested) {
+		sfs_txend(v->vn_fs->fs_data, SFS_JPHYS_WRITE);
+	}
 	unreserve_buffers(SFS_BLOCKSIZE);
 
 	return result;
@@ -422,7 +428,11 @@ sfs_truncate(struct vnode *v, off_t len)
 	struct sfs_vnode *sv = v->vn_data;
 	int result;
 
-	sfs_txstart(sfs, SFS_JPHYS_TRUNCATE);
+	bool nested = true;
+	if(curproc->tx == NULL) {
+		sfs_txstart(sfs, SFS_JPHYS_TRUNCATE);
+		nested = false;
+	}
 
 	reserve_buffers(SFS_BLOCKSIZE);
 	lock_acquire(sv->sv_lock);
@@ -433,7 +443,10 @@ sfs_truncate(struct vnode *v, off_t len)
 	sfs_unlock_freemap(sfs);
 	lock_release(sv->sv_lock);
 
-	sfs_txend(sfs, SFS_JPHYS_TRUNCATE);
+	if(!nested) {
+		sfs_txend(sfs, SFS_JPHYS_TRUNCATE);
+	}
+
 	unreserve_buffers(SFS_BLOCKSIZE);
 
 	return result;
@@ -643,14 +656,20 @@ sfs_creat(struct vnode *v, const char *name, bool excl, mode_t mode,
 		return 0;
 	}
 
-	sfs_txstart(sfs, SFS_JPHYS_CREAT);
+	bool nested = true;
+	if(curproc->tx == NULL) {
+		sfs_txstart(sfs, SFS_JPHYS_CREAT);
+		nested = false;
+	}
 
 	/* Didn't exist - create it */
 	result = sfs_makeobj(sfs, SFS_TYPE_FILE, &newguy);
 	if (result) {
 		lock_release(sv->sv_lock);
 
-		sfs_txend(sfs, SFS_JPHYS_CREAT);
+		if(!nested) {
+			sfs_txend(sfs, SFS_JPHYS_CREAT);
+		}
 		unreserve_buffers(SFS_BLOCKSIZE);
 
 		return result;
@@ -670,7 +689,9 @@ sfs_creat(struct vnode *v, const char *name, bool excl, mode_t mode,
 		VOP_DECREF(&newguy->sv_absvn);
 		lock_release(sv->sv_lock);
 
-		sfs_txend(sfs, SFS_JPHYS_CREAT);
+		if(!nested) {
+			sfs_txend(sfs, SFS_JPHYS_CREAT);
+		}
 		unreserve_buffers(SFS_BLOCKSIZE);
 
 		return result;
@@ -688,7 +709,9 @@ sfs_creat(struct vnode *v, const char *name, bool excl, mode_t mode,
 	lock_release(newguy->sv_lock);
 	lock_release(sv->sv_lock);
 
-	sfs_txend(sfs, SFS_JPHYS_CREAT);
+	if(!nested) {
+		sfs_txend(sfs, SFS_JPHYS_CREAT);
+	}
 	unreserve_buffers(SFS_BLOCKSIZE);
 
 	return 0;
@@ -736,7 +759,11 @@ sfs_link(struct vnode *dir, const char *name, struct vnode *file)
 		return result;
 	}
 
-	sfs_txstart(dir->vn_fs->fs_data, SFS_JPHYS_LINK);
+	bool nested = true;
+	if(curproc->tx == NULL) {
+		sfs_txstart(dir->vn_fs->fs_data, SFS_JPHYS_LINK);
+		nested = false;
+	}
 
 	/* Create the link */
 	result = sfs_dir_link(sv, name, f->sv_ino, NULL);
@@ -745,7 +772,9 @@ sfs_link(struct vnode *dir, const char *name, struct vnode *file)
 		lock_release(f->sv_lock);
 		lock_release(sv->sv_lock);
 
-		sfs_txend(dir->vn_fs->fs_data, SFS_JPHYS_LINK);
+		if(!nested) {
+			sfs_txend(dir->vn_fs->fs_data, SFS_JPHYS_LINK);
+		}
 		unreserve_buffers(SFS_BLOCKSIZE);
 
 		return result;
@@ -760,7 +789,9 @@ sfs_link(struct vnode *dir, const char *name, struct vnode *file)
 	lock_release(f->sv_lock);
 	lock_release(sv->sv_lock);
 
-	sfs_txend(dir->vn_fs->fs_data, SFS_JPHYS_LINK);
+	if(!nested) {
+		sfs_txend(dir->vn_fs->fs_data, SFS_JPHYS_LINK);
+	}
 	unreserve_buffers(SFS_BLOCKSIZE);
 
 	return 0;
@@ -790,6 +821,8 @@ sfs_mkdir(struct vnode *v, const char *name, mode_t mode)
 	struct sfs_vnode *newguy;
 
 	(void)mode;
+
+	bool nested = true;
 
 	reserve_buffers(SFS_BLOCKSIZE);
 	lock_acquire(sv->sv_lock);
@@ -828,7 +861,10 @@ sfs_mkdir(struct vnode *v, const char *name, mode_t mode)
 		      sfs->sfs_sb.sb_volname, name, sv->sv_ino);
 	}
 
-	sfs_txstart(sfs, SFS_JPHYS_MKDIR);
+	if(curproc->tx == NULL) {
+		sfs_txstart(sfs, SFS_JPHYS_MKDIR);
+		nested = false;
+	}
 
 	result = sfs_makeobj(sfs, SFS_TYPE_DIR, &newguy);
 	if (result) {
@@ -872,8 +908,9 @@ sfs_mkdir(struct vnode *v, const char *name, mode_t mode)
 	lock_release(sv->sv_lock);
 	VOP_DECREF(&newguy->sv_absvn);
 
-
-	sfs_txend(sfs, SFS_JPHYS_MKDIR);
+	if(!nested) {
+		sfs_txend(sfs, SFS_JPHYS_MKDIR);
+	}
 	unreserve_buffers(SFS_BLOCKSIZE);
 
 	KASSERT(result==0);
@@ -886,7 +923,9 @@ die_uncreate:
 
 die_simple:
 	sfs_dinode_unload(sv);
-	sfs_txend(sfs, SFS_JPHYS_MKDIR);
+	if(!nested) {
+		sfs_txend(sfs, SFS_JPHYS_MKDIR);
+	}
 
 die_early:
 	lock_release(sv->sv_lock);
@@ -944,7 +983,11 @@ sfs_rmdir(struct vnode *v, const char *name)
 		goto die_loadvictim;
 	}
 
-	sfs_txstart(sfs, SFS_JPHYS_RMDIR);
+	bool nested = true;
+	if(curproc->tx == NULL) {
+		sfs_txstart(sfs, SFS_JPHYS_RMDIR);
+		nested = false;
+	}
 
 	victim_inodeptr = sfs_dinode_map(victim);
 
@@ -997,7 +1040,9 @@ sfs_rmdir(struct vnode *v, const char *name)
 
 die_total:
 	sfs_dinode_unload(victim);
-	sfs_txend(sfs, SFS_JPHYS_RMDIR);
+	if(!nested) {
+		sfs_txend(sfs, SFS_JPHYS_RMDIR);
+	}
 die_loadvictim:
 	lock_release(victim->sv_lock);
  	VOP_DECREF(&victim->sv_absvn);
@@ -1189,6 +1234,8 @@ sfs_rename(struct vnode *absdir1, const char *name1,
 	int found_dir1;
 	bool must_unlock_freemap = false;
 	struct vnode *must_decref_vnode = NULL;
+
+	bool nested = true;
 
 	/* make gcc happy */
 	obj2_inodeptr = NULL;
@@ -1474,7 +1521,10 @@ sfs_rename(struct vnode *absdir1, const char *name1,
 	 * the operation.
 	 */
 
-	sfs_txstart(sfs, SFS_JPHYS_RENAME);
+	if(curproc->tx == NULL) {
+		sfs_txstart(sfs, SFS_JPHYS_RENAME);
+		nested = false;
+	}
 
 	/* At this point we should have valid slots in both dirs. */
 	KASSERT(slot1>=0);
@@ -1637,7 +1687,9 @@ sfs_rename(struct vnode *absdir1, const char *name1,
 		VOP_DECREF(must_decref_vnode);
 	}
  	sfs_dinode_unload(dir1);
- 	sfs_txend(sfs, SFS_JPHYS_RENAME);
+ 	if(!nested) {
+ 		sfs_txend(sfs, SFS_JPHYS_RENAME);
+ 	}
  out3:
  	sfs_dinode_unload(dir2);
  out2:
