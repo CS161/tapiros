@@ -2237,6 +2237,8 @@ void sfs_txstartcb(struct sfs_fs *sfs, sfs_lsn_t newlsn, struct sfs_jphys_writec
 
 void sfs_txendcb(struct sfs_fs *sfs, sfs_lsn_t newlsn, struct sfs_jphys_writecontext *ctx) {
 	(void) ctx;
+	(void) sfs;
+	(void) newlsn;
 	curproc->tx = NULL;
 	return;
 }
