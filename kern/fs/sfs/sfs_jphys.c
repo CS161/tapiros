@@ -1979,6 +1979,7 @@ sfs_jphys_loadup(struct sfs_fs *sfs)
 	jp->jp_headbyte = jp->jp_recov_headpos.jp_blockoffset;
 	jp->jp_headfirstlsn = headlsn;
 	jp->jp_firstlsns[jp->jp_headjblock] = headlsn;
+	jp->jp_oldestjblock = jp->jp_headjblock;
 
 	jp->jp_memtailjblock = jp->jp_recov_tailpos.jp_jblock;
 	jp->jp_memtaillsn = taillsn;
