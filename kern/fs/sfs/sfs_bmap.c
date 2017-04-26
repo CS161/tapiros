@@ -1154,6 +1154,13 @@ sfs_itrunc(struct sfs_vnode *sv, off_t newlen)
 		}
 	}
 
+	struct sfs_jphys_write32 rec = {curproc->tx->tid, 			// txid
+									sv->sv_ino, 				// daddr
+									inodeptr->sfi_size,			// old data
+									newlen, 					// new data
+									(void *)&inodeptr->sfi_size - (void *)inodeptr};	// offset
+	sfs_jphys_write(sfs, NULL, NULL, SFS_JPHYS_WRITE32, &rec, sizeof(struct sfs_jphys_write32));
+
 	/* Set the file size */
 	inodeptr->sfi_size = newlen;
 
