@@ -2243,5 +2243,7 @@ void sfs_txstart(struct sfs_fs *sfs, uint8_t type) {
 void sfs_txend(struct sfs_fs *sfs, uint8_t type) {
 	struct sfs_jphys_tx rec = {curproc->tx->tid, type};
 	sfs_jphys_write(sfs, sfs_txcreate, NULL, SFS_JPHYS_TXEND, &rec, sizeof(struct sfs_jphys_tx));
+
+	curproc->tx = NULL;
 	return;
 }

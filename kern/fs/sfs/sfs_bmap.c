@@ -887,6 +887,14 @@ sfs_discard_subtree(struct sfs_vnode *sv, uint32_t *rootptr, unsigned indir,
 							  endoffset)) {
 					continue;
 				}
+
+				struct sfs_jphys_write32 rec = {curproc->tx->tid, 						// txid
+												layers[layer].block, 					// daddr
+												layers[layer].data[layers[layer].pos], 	// old data
+												0, 										// new data
+												layers[layer].pos * sizeof(daddr_t)};	// offset
+				sfs_jphys_write(sfs, NULL, NULL, SFS_JPHYS_WRITE32, &rec, sizeof(struct sfs_jphys_write32));
+
 				layers[layer].data[layers[layer].pos] = 0;
 				layers[layer].modified = true;
 
@@ -906,6 +914,14 @@ sfs_discard_subtree(struct sfs_vnode *sv, uint32_t *rootptr, unsigned indir,
 					sfs_dinode_mark_dirty(sv);
 				}
 				if (indir != 1) {
+
+					struct sfs_jphys_write32 rec = {curproc->tx->tid, 				// txid
+												layers[2].block, 					// daddr
+												layers[2].data[layers[2].pos], 		// old data
+												0, 									// new data
+												layers[2].pos * sizeof(daddr_t)};	// offset
+					sfs_jphys_write(sfs, NULL, NULL, SFS_JPHYS_WRITE32, &rec, sizeof(struct sfs_jphys_write32));
+
 					layers[2].modified = true;
 					layers[2].data[layers[2].pos] = 0;
 				}
@@ -959,6 +975,14 @@ sfs_discard_subtree(struct sfs_vnode *sv, uint32_t *rootptr, unsigned indir,
 				sfs_dinode_mark_dirty(sv);
 			}
 			if (indir == 3) {
+
+				struct sfs_jphys_write32 rec = {curproc->tx->tid, 					// txid
+												layers[3].block, 					// daddr
+												layers[3].data[layers[3].pos], 		// old data
+												0, 									// new data
+												layers[3].pos * sizeof(daddr_t)};	// offset
+				sfs_jphys_write(sfs, NULL, NULL, SFS_JPHYS_WRITE32, &rec, sizeof(struct sfs_jphys_write32));
+
 				layers[3].modified = true;
 				layers[3].data[layers[3].pos] = 0;
 			}
@@ -1041,6 +1065,14 @@ sfs_discard(struct sfs_vnode *sv,
 		block = inodeptr->sfi_direct[i];
 		if (i >= startfileblock && i < endfileblock && block != 0) {
 			sfs_bfree_prelocked(sfs, block);
+
+			struct sfs_jphys_write32 rec = {curproc->tx->tid, 			// txid
+											sv->sv_ino, 				// daddr
+											inodeptr->sfi_direct[i],	// old data
+											0, 							// new data
+											(void *)&inodeptr->sfi_direct[i] - (void *)inodeptr};	// offset
+			sfs_jphys_write(sfs, NULL, NULL, SFS_JPHYS_WRITE32, &rec, sizeof(struct sfs_jphys_write32));
+
 			inodeptr->sfi_direct[i] = 0;
 			sfs_dinode_mark_dirty(sv);
 		}
