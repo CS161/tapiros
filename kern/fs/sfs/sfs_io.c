@@ -549,17 +549,19 @@ sfs_metaio(struct sfs_vnode *sv, off_t actualpos, void *data, size_t len,
 	else {
 		/* Update the selected region */
 
+		for(size_t count = 0; count < len; count += WRITEM_LEN) {
+			struct sfs_jphys_writem rec; 
+			rec.tid = curproc->tx->tid;
+			rec.index = sv->sv_ino;
+			rec.offset = blockoffset + count;
+			rec.len = (count + WRITEM_LEN < len) ? WRITEM_LEN : len - count;
+			bzero(&rec.old, WRITEM_LEN);
+			memcpy(&rec.old, (ioptr + blockoffset + count), rec.len);
+			memcpy(&rec.new, (data + count), rec.len);
+			// check that this is correct
 
-		// fill writem with memcpy
-		/*for(size_t count = 0; count < len; count += WRITEM_LEN) {
-			struct sfs_jphys_writem rec = {curproc->tx->tid, 			// txid
-										   sv->sv_ino,					// daddr
-										   blockoffset + count,			// offset
-										   (count + WRITEM_LEN < len) ? WRITEM_LEN : len - count,		// len
-										   (ioptr + blockoffset + count),	// old data
-										   (data + count)};				// new data		
 			sfs_jphys_write(sfs, NULL, NULL, SFS_JPHYS_WRITEM, &rec, sizeof(rec));
-		}*/
+		}
 
 		memcpy(ioptr + blockoffset, data, len);
 		buffer_mark_dirty(iobuf);
