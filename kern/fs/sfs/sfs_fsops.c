@@ -669,10 +669,9 @@ sfs_domount(void *options, struct device *dev, struct fs **ret)
 
 	while (!sfs_jiter_done(ji)) {
 		type = sfs_jiter_type(ji);
+		recptr = sfs_jiter_rec(ji, &reclen);
 		switch(type) {
 			case SFS_JPHYS_FREEB: {
-				recptr = sfs_jiter_rec(ji, &reclen);
-
 				struct sfs_jphys_block rec;
 				memcpy(&rec, recptr, sizeof(rec));
 				
@@ -681,8 +680,6 @@ sfs_domount(void *options, struct device *dev, struct fs **ret)
 				break;
 			}
 			case SFS_JPHYS_WRITEB: {
-				recptr = sfs_jiter_rec(ji, &reclen);
-
 				struct sfs_jphys_writeb rec;
 				memcpy(&rec, recptr, sizeof(rec));
 
@@ -710,8 +707,54 @@ sfs_domount(void *options, struct device *dev, struct fs **ret)
 		type = sfs_jiter_type(ji);
 		lsn = sfs_jiter_lsn(ji);
 		recptr = sfs_jiter_rec(ji, &reclen);
-
-     	// stuff
+		switch(type) {
+			// REDO
+			case SFS_JPHYS_TXSTART: {
+				// do nothing
+				break;
+			}
+			case SFS_JPHYS_TXEND: {
+				// do nothing
+				break;
+			}
+			case SFS_JPHYS_ALLOCB: {
+				struct sfs_jphys_block rec;
+				memcpy(&rec, recptr, sizeof(rec));
+				break;
+			}
+			case SFS_JPHYS_FREEB: {
+				struct sfs_jphys_block rec;
+				memcpy(&rec, recptr, sizeof(rec));
+				break;
+			}
+			case SFS_JPHYS_WRITEB: {
+				struct sfs_jphys_writeb rec;
+				memcpy(&rec, recptr, sizeof(rec));
+				break;
+			}
+			case SFS_JPHYS_WRITE16: {
+				struct sfs_jphys_write16 rec;
+				memcpy(&rec, recptr, sizeof(rec));
+				break;
+			}
+			case SFS_JPHYS_WRITE32: {
+				struct sfs_jphys_write32 rec;
+				memcpy(&rec, recptr, sizeof(rec));
+				break;
+			}
+			case SFS_JPHYS_WRITEM: {
+				struct sfs_jphys_writem rec;
+				memcpy(&rec, recptr, sizeof(rec));
+				break;
+			}
+			case SFS_JPHYS_WRITEDIR: {	// !!! not currently used
+				struct sfs_jphys_writedir rec;
+				memcpy(&rec, recptr, sizeof(rec));
+				break;
+			}
+			default:
+				break;
+		}
 
 		result = sfs_jiter_next(sfs, ji);
 		if(result != 0)
@@ -730,7 +773,55 @@ sfs_domount(void *options, struct device *dev, struct fs **ret)
 		lsn = sfs_jiter_lsn(ji);
 		recptr = sfs_jiter_rec(ji, &reclen);
 
-     	// stuff
+     	switch(type) {
+     		// UNDO
+			case SFS_JPHYS_TXSTART: {
+				// do nothing
+				break;
+			}
+			case SFS_JPHYS_TXEND: {
+				struct sfs_jphys_tx rec;
+				memcpy(&rec, recptr, sizeof(rec));
+				break;
+			}
+			case SFS_JPHYS_ALLOCB: {
+				struct sfs_jphys_block rec;
+				memcpy(&rec, recptr, sizeof(rec));
+				break;
+			}
+			case SFS_JPHYS_FREEB: {
+				struct sfs_jphys_block rec;
+				memcpy(&rec, recptr, sizeof(rec));
+				break;
+			}
+			case SFS_JPHYS_WRITEB: {
+				struct sfs_jphys_writeb rec;
+				memcpy(&rec, recptr, sizeof(rec));
+				break;
+			}
+			case SFS_JPHYS_WRITE16: {
+				struct sfs_jphys_write16 rec;
+				memcpy(&rec, recptr, sizeof(rec));
+				break;
+			}
+			case SFS_JPHYS_WRITE32: {
+				struct sfs_jphys_write32 rec;
+				memcpy(&rec, recptr, sizeof(rec));
+				break;
+			}
+			case SFS_JPHYS_WRITEM: {
+				struct sfs_jphys_writem rec;
+				memcpy(&rec, recptr, sizeof(rec));
+				break;
+			}
+			case SFS_JPHYS_WRITEDIR: {	// !!! not currently used
+				struct sfs_jphys_writedir rec;
+				memcpy(&rec, recptr, sizeof(rec));
+				break;
+			}
+			default:
+				break;
+		}
 
 		result = sfs_jiter_prev(sfs, ji);
 		if(result != 0)
@@ -749,7 +840,34 @@ sfs_domount(void *options, struct device *dev, struct fs **ret)
 		lsn = sfs_jiter_lsn(ji);
 		recptr = sfs_jiter_rec(ji, &reclen);
 
-     	// stuff
+     	switch(type) {
+     		case SFS_JPHYS_WRITEB: {
+     			struct sfs_jphys_writeb rec;
+				memcpy(&rec, recptr, sizeof(rec));
+
+				if(bitmap_isset(user_blocks, rec.index)) {
+					struct buf *iobuf;
+					void *ioptr;
+
+					buffer_read(&sfs->sfs_absfs, rec.index, SFS_BLOCKSIZE, &iobuf);
+					ioptr = buffer_map(iobuf);
+
+					uint32_t disk_checksum = sfs_checksum(ioptr);
+					if(rec.checksum != disk_checksum) {
+						bzero(ioptr, SFS_BLOCKSIZE);
+						buffer_mark_valid(iobuf);
+						buffer_mark_dirty(iobuf);
+					}
+					buffer_release(iobuf);
+
+					bitmap_unmark(user_blocks, rec.index);
+				}
+
+				break;
+     		}
+     		default:
+     			break;
+     	}
 
 		result = sfs_jiter_prev(sfs, ji);
 		if(result != 0)
