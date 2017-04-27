@@ -63,6 +63,9 @@
 /* Block number for the initial root directory contents */
 static uint32_t rootdir_data_block;
 
+/* Block number for the initial purgatory directory contents */
+static uint32_t purgdir_data_block;
+
 /* Journal location and size */
 static uint32_t journalstart, journalblocks;
 
@@ -111,9 +114,10 @@ initfreemap(uint32_t fsblocks)
 		     "increase MAXFREEMAPBLOCKS and recompile");
 	}
 
-	/* mark the superblock and root inode in use */
+	/* mark the superblock, root inode, and purgatory inode in use */
 	allocblock(SFS_SUPER_BLOCK);
 	allocblock(SFS_ROOTDIR_INO);
+	allocblock(SFS_PURGDIR_INO);
 
 	/* the freemap blocks must be in use */
 	for (i=0; i<freemapblocks; i++) {
@@ -130,6 +134,10 @@ initfreemap(uint32_t fsblocks)
 	/* allocate a block for the root directory contents */
 	rootdir_data_block = journalstart + journalblocks;
 	allocblock(rootdir_data_block);
+
+	/* allocate a block for the purgatory directory contents */
+	purgdir_data_block = rootdir_data_block + 1;
+	allocblock(purgdir_data_block);
 
 	/* all blocks in the freemap but past the volume end are "in use" */
 	for (i=fsblocks; i<freemapbits; i++) {
@@ -261,6 +269,36 @@ writerootdir(void)
 }
 
 /*
+ * Write out the purgatory directory inode.
+ */
+static
+void
+writepurgdir(void)
+{
+	struct sfs_dinode sfi;
+	struct sfs_direntry sfd[SFS_BLOCKSIZE / sizeof(struct sfs_direntry)];
+
+	assert(purgdir_data_block > 0);
+	assert(sizeof(sfd) >= sizeof(struct sfs_direntry) * 2);
+
+	/* Initialize the dinode */
+	bzero((void *)&sfi, sizeof(sfi));
+
+	sfi.sfi_size = SWAP32(sizeof(struct sfs_direntry) * 2);
+	sfi.sfi_type = SWAP16(SFS_TYPE_DIR);
+	sfi.sfi_linkcount = SWAP16(0);
+	sfi.sfi_direct[0] = SWAP32(purgdir_data_block);
+
+	/* Write it out */
+	diskwrite(&sfi, SFS_PURGDIR_INO);
+
+	/* Write out the initial purgatory directory contents */
+	bzero((void *)sfd, sizeof(sfd));
+
+	diskwrite(sfd, purgdir_data_block);
+}
+
+/*
  * Main.
  */
 int
@@ -311,6 +349,7 @@ main(int argc, char **argv)
 	writefreemap(size);
 	writejournal();
 	writerootdir();
+	writepurgdir();
 
 	closedisk();
 
