@@ -540,10 +540,11 @@ dump_client_record(uint32_t myblock, unsigned myoffset, uint64_t mylsn,
 			struct sfs_jphys_writem rec;
 			copyandzero(&rec, sizeof(rec), data, len);
 
-			printf("WRITEM -> tid: %llu, index: %lu, offset: %u\nold: %s\nnew: %s\n",
+			printf("WRITEM -> tid: %llu, index: %lu, offset: %u, len: %u\nold: %s\nnew: %s\n",
 					(unsigned long long) rec.tid, 
 					(unsigned long) rec.index,
 					(unsigned) rec.offset,
+					(unsigned) rec.len,
 					rec.old, 
 					rec.new);
 			break;

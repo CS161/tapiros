@@ -214,13 +214,16 @@ struct sfs_jphys_write32 {
 	uint16_t offset;				// offset in sector
 };
 
+#define WRITEM_LEN 128
+
 /* Contents for SFS_JPHYS_WRITEM */
 struct sfs_jphys_writem {
 	uint64_t tid;					// transaction id
 	daddr_t index;					// disk address
 	uint16_t offset;				// offset in sector
-	char old[128];					// old metadata chunk
-	char new[128];					// new metadata chunk
+	uint16_t len;					// length of chunk
+	char old[WRITEM_LEN];			// old metadata chunk
+	char new[WRITEM_LEN];			// new metadata chunk
 };
 
 /* Contents for SFS_JPHYS_WRITEDIR */

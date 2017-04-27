@@ -450,6 +450,14 @@ sfs_io(struct sfs_vnode *sv, struct uio *uio)
 	if (uio->uio_resid != origresid &&
 	    uio->uio_rw == UIO_WRITE &&
 	    uio->uio_offset > (off_t)inodeptr->sfi_size) {
+
+		struct sfs_jphys_write32 rec = {curproc->tx->tid, 		// txid
+									   sv->sv_ino,				// daddr
+									   inodeptr->sfi_size,		// old data
+									   uio->uio_offset,			// new data
+									   (void *)&inodeptr->sfi_size - (void *)inodeptr};	// offset				
+		sfs_jphys_write(sv->sv_absvn.vn_fs->fs_data, NULL, NULL, SFS_JPHYS_WRITE32, &rec, sizeof(rec));
+
 		inodeptr->sfi_size = uio->uio_offset;
 		sfs_dinode_mark_dirty(sv);
 	}
@@ -540,12 +548,33 @@ sfs_metaio(struct sfs_vnode *sv, off_t actualpos, void *data, size_t len,
 	}
 	else {
 		/* Update the selected region */
+
+
+		// fill writem with memcpy
+		/*for(size_t count = 0; count < len; count += WRITEM_LEN) {
+			struct sfs_jphys_writem rec = {curproc->tx->tid, 			// txid
+										   sv->sv_ino,					// daddr
+										   blockoffset + count,			// offset
+										   (count + WRITEM_LEN < len) ? WRITEM_LEN : len - count,		// len
+										   (ioptr + blockoffset + count),	// old data
+										   (data + count)};				// new data		
+			sfs_jphys_write(sfs, NULL, NULL, SFS_JPHYS_WRITEM, &rec, sizeof(rec));
+		}*/
+
 		memcpy(ioptr + blockoffset, data, len);
 		buffer_mark_dirty(iobuf);
 
 		/* Update the vnode size if needed */
 		endpos = actualpos + len;
 		if (endpos > (off_t)dino->sfi_size) {
+
+			struct sfs_jphys_write32 rec = {curproc->tx->tid, 	// txid
+									   		sv->sv_ino,			// daddr
+									  	 	dino->sfi_size,		// old data
+									   		endpos,				// new data
+									   		(void *)&dino->sfi_size - (void *)dino};	// offset				
+			sfs_jphys_write(sfs, NULL, NULL, SFS_JPHYS_WRITE32, &rec, sizeof(rec));
+
 			dino->sfi_size = endpos;
 			sfs_dinode_mark_dirty(sv);
 		}

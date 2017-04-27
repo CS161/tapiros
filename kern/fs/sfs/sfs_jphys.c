@@ -2231,7 +2231,6 @@ void sfs_txstartcb(struct sfs_fs *sfs, sfs_lsn_t newlsn, struct sfs_jphys_writec
 	lock_release(tx_lock);
 
 	curproc->tx = tx;
-
 	return;
 }
 
