@@ -192,7 +192,7 @@ struct sfs_jphys_block {
 /* Contents for SFS_JPHYS_WRITEB */
 struct sfs_jphys_writeb {
 	uint64_t tid;					// transaction id
-	uint64_t checksum;				// checksum for stale writes
+	uint32_t checksum;				// checksum for stale writes
 	daddr_t index;					// disk address
 };
 

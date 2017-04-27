@@ -506,10 +506,10 @@ dump_client_record(uint32_t myblock, unsigned myoffset, uint64_t mylsn,
 			struct sfs_jphys_writeb rec;
 			copyandzero(&rec, sizeof(rec), data, len);
 
-			printf("WRITEB -> tid: %llu, index: %lu, checksum: %llu\n",
+			printf("WRITEB -> tid: %llu, index: %lu, checksum: %lu\n",
 					(unsigned long long) rec.tid, 
 					(unsigned long) rec.index,
-					(unsigned long long) rec.checksum);
+					(unsigned long) rec.checksum);
 			break;
 		}
 		case SFS_JPHYS_WRITE16: {

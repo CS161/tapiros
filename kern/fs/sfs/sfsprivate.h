@@ -165,6 +165,6 @@ void sfs_txstartcb(struct sfs_fs *sfs, sfs_lsn_t newlsn, struct sfs_jphys_writec
 void sfs_txendcb(struct sfs_fs *sfs, sfs_lsn_t newlsn, struct sfs_jphys_writecontext *ctx);
 void sfs_txstart(struct sfs_fs *sfs, uint8_t type);
 void sfs_txend(struct sfs_fs *sfs, uint8_t type);
-uint64_t sfs_checksum(const char *buf);
+uint32_t sfs_checksum(const char *buf);
 
 #endif /* _SFSPRIVATE_H_ */

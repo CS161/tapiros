@@ -2260,8 +2260,18 @@ void sfs_txend(struct sfs_fs *sfs, uint8_t type) {
 	return;
 }
 
-// *** buf is 512 bytes long
-uint64_t sfs_checksum(const char *buf) {
-	(void) buf;
-	return 0;
+#define ADLER_MAGIC 65521
+
+// *** buf is SFS_BLOCKSIZE bytes long
+// uses the Adler-32 algorithm, described here: https://en.wikipedia.org/wiki/Adler-32
+uint32_t sfs_checksum(const char *buf) {
+
+	uint16_t a = 1, b = 0;
+
+	for(uint32_t i = 0; i < SFS_BLOCKSIZE; i++) {
+		a = (a + buf[i]) % ADLER_MAGIC;
+		b = (a + b) % ADLER_MAGIC;
+	}
+
+	return (b << 16) | a;
 }
