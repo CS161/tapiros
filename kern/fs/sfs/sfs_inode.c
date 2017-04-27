@@ -399,6 +399,14 @@ sfs_loadvnode(struct sfs_fs *sfs, uint32_t ino, int forcetype,
 	 */
 	if (forcetype != SFS_TYPE_INVAL) {
 		KASSERT(dino->sfi_type == SFS_TYPE_INVAL);
+
+		struct sfs_jphys_write16 rec = {curproc->tx->tid, 	// txid
+									   	ino,				// daddr
+									  	dino->sfi_type,		// old data
+									    forcetype,			// new data
+									   	(void *)&dino->sfi_type - (void *)dino};	// offset				
+		sfs_jphys_write(sfs, NULL, NULL, SFS_JPHYS_WRITE16, &rec, sizeof(rec));
+
 		dino->sfi_type = forcetype;
 		buffer_mark_dirty(dinobuf);
 	}

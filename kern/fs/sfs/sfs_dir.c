@@ -74,6 +74,8 @@ sfs_writedir(struct sfs_vnode *sv, int slot, struct sfs_direntry *sd)
 	KASSERT(slot>=0);
 	actualpos = slot * sizeof(struct sfs_direntry);
 
+	// consider moving journaling out of metaio and into here
+
 	return sfs_metaio(sv, actualpos, sd, sizeof(*sd), UIO_WRITE);
 }
 
