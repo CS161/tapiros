@@ -279,6 +279,12 @@ sfs_attachbuf(struct fs *fs, daddr_t diskblock, struct buf *buf)
 	md->oldlsn = 0;
 	md->newlsn = 0;
 
+	if(md->tx != NULL) {
+		lock_acquire(tx_lock);
+		md->tx->nbufs++;
+		lock_release(tx_lock);
+	}
+
 	olddata = buffer_set_fsdata(buf, md);
 
 	/* There should have been no fs-specific buffer data beforehand. */
@@ -292,13 +298,19 @@ void
 sfs_detachbuf(struct fs *fs, daddr_t diskblock, struct buf *buf)
 {
 	struct sfs_fs *sfs = fs->fs_data;
-	void *bufdata;
+	struct sfs_data *bufdata;
 
 	(void)sfs;
 	(void)diskblock;
 
 	/* Clear the fs-specific metadata by installing null. */
 	bufdata = buffer_set_fsdata(buf, NULL);
+
+	if(bufdata->tx != NULL) {
+		lock_acquire(tx_lock);
+		bufdata->tx->nbufs--;
+		lock_release(tx_lock);
+	}
 
 	KASSERT(bufdata != NULL);
 	kfree(bufdata);
@@ -636,7 +648,45 @@ sfs_domount(void *options, struct device *dev, struct fs **ret)
 	reserve_buffers(SFS_BLOCKSIZE);
 
 	/********************************/
-	/* Call your recovery code here */
+	/*      Recovery code start     */
+
+	struct sfs_jiter *ji;
+	unsigned type;
+	uint64_t lsn;
+	void *recptr;
+	size_t reclen;
+
+	// Loop 1 - Forward to mark user blocks
+
+	result = sfs_jiter_fwdcreate(sfs, &ji);
+	if(result != 0) 
+		panic("sfs_jiter_fwdcreate failed\n");
+
+	while (!sfs_jiter_done(ji)) {
+		type = sfs_jiter_type(ji);
+		lsn = sfs_jiter_lsn(ji);
+		recptr = sfs_jiter_rec(ji, &reclen);
+
+     	// stuff
+
+		result = sfs_jiter_next(sfs, ji);
+		if(result != 0)
+			panic("sfs_jiter_next failed\n");
+   	}
+	sfs_jiter_destroy(ji);
+
+	// Loop 2 - Forward to redo all operations
+
+	// Loop 3 - Backward to undo uncommitted transactions
+
+	// Loop 4 - Backward to zero stale user data
+	
+	(void)result;
+	(void)type;
+	(void)lsn;
+	(void)recptr;
+
+	/*       Recovery code end      */
 	/********************************/
 
 	unreserve_buffers(SFS_BLOCKSIZE);
@@ -658,7 +708,7 @@ sfs_domount(void *options, struct device *dev, struct fs **ret)
 	reserve_buffers(SFS_BLOCKSIZE);
 
 	/**************************************/
-	/* Maybe call more recovery code here */
+	/* Clear out purgatory */
 	/**************************************/
 
 	unreserve_buffers(SFS_BLOCKSIZE);
