@@ -660,7 +660,7 @@ sfs_domount(void *options, struct device *dev, struct fs **ret)
 
 	result = sfs_jiter_fwdcreate(sfs, &ji);
 	if(result != 0) 
-		panic("sfs_jiter_fwdcreate failed\n");
+		panic("sfs_jiter_fwdcreate for loop 1 of recovery failed\n");
 
 	while (!sfs_jiter_done(ji)) {
 		type = sfs_jiter_type(ji);
@@ -671,15 +671,66 @@ sfs_domount(void *options, struct device *dev, struct fs **ret)
 
 		result = sfs_jiter_next(sfs, ji);
 		if(result != 0)
-			panic("sfs_jiter_next failed\n");
+			panic("sfs_jiter_next in loop 1 of recovery failed\n");
    	}
 	sfs_jiter_destroy(ji);
 
 	// Loop 2 - Forward to redo all operations
 
+	result = sfs_jiter_fwdcreate(sfs, &ji);
+	if(result != 0) 
+		panic("sfs_jiter_fwdcreate for loop 2 of recovery failed\n");
+
+	while (!sfs_jiter_done(ji)) {
+		type = sfs_jiter_type(ji);
+		lsn = sfs_jiter_lsn(ji);
+		recptr = sfs_jiter_rec(ji, &reclen);
+
+     	// stuff
+
+		result = sfs_jiter_next(sfs, ji);
+		if(result != 0)
+			panic("sfs_jiter_next in loop 2 of recovery failed\n");
+   	}
+	sfs_jiter_destroy(ji);
+
 	// Loop 3 - Backward to undo uncommitted transactions
 
+	result = sfs_jiter_revcreate(sfs, &ji);
+	if(result != 0) 
+		panic("sfs_jiter_revcreate for loop 3 of recoveryfailed\n");
+
+	while (!sfs_jiter_done(ji)) {
+		type = sfs_jiter_type(ji);
+		lsn = sfs_jiter_lsn(ji);
+		recptr = sfs_jiter_rec(ji, &reclen);
+
+     	// stuff
+
+		result = sfs_jiter_prev(sfs, ji);
+		if(result != 0)
+			panic("sfs_jiter_prev in loop 3 of recovery failed\n");
+   	}
+	sfs_jiter_destroy(ji);
+
 	// Loop 4 - Backward to zero stale user data
+
+	result = sfs_jiter_revcreate(sfs, &ji);
+	if(result != 0) 
+		panic("sfs_jiter_revcreate for loop 4 of recovery failed\n");
+
+	while (!sfs_jiter_done(ji)) {
+		type = sfs_jiter_type(ji);
+		lsn = sfs_jiter_lsn(ji);
+		recptr = sfs_jiter_rec(ji, &reclen);
+
+     	// stuff
+
+		result = sfs_jiter_prev(sfs, ji);
+		if(result != 0)
+			panic("sfs_jiter_prev in loop 4 of recovery failed\n");
+   	}
+	sfs_jiter_destroy(ji);
 	
 	(void)result;
 	(void)type;
