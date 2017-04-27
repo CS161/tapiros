@@ -656,7 +656,12 @@ sfs_domount(void *options, struct device *dev, struct fs **ret)
 	void *recptr;
 	size_t reclen;
 
-	// Loop 1 - Forward to mark user blocks
+	struct bitmap *user_blocks = bitmap_create(SFS_FS_FREEMAPBITS(sfs));
+	if (user_blocks == NULL) {
+		panic("bitmap_create for recovery failed\n");
+	}
+
+	// Loop 1 - Forward to mark user blocks -------------------------------
 
 	result = sfs_jiter_fwdcreate(sfs, &ji);
 	if(result != 0) 
@@ -664,10 +669,30 @@ sfs_domount(void *options, struct device *dev, struct fs **ret)
 
 	while (!sfs_jiter_done(ji)) {
 		type = sfs_jiter_type(ji);
-		lsn = sfs_jiter_lsn(ji);
-		recptr = sfs_jiter_rec(ji, &reclen);
+		switch(type) {
+			case SFS_JPHYS_FREEB: {
+				recptr = sfs_jiter_rec(ji, &reclen);
 
-     	// stuff
+				struct sfs_jphys_block rec;
+				memcpy(&rec, recptr, sizeof(rec));
+				
+				if(bitmap_isset(user_blocks, rec.index))
+					bitmap_unmark(user_blocks, rec.index);
+				break;
+			}
+			case SFS_JPHYS_WRITEB: {
+				recptr = sfs_jiter_rec(ji, &reclen);
+
+				struct sfs_jphys_writeb rec;
+				memcpy(&rec, recptr, sizeof(rec));
+
+				if(!bitmap_isset(user_blocks, rec.index))
+					bitmap_mark(user_blocks, rec.index);
+				break;
+			}
+			default:
+				break;
+		}
 
 		result = sfs_jiter_next(sfs, ji);
 		if(result != 0)
@@ -675,7 +700,7 @@ sfs_domount(void *options, struct device *dev, struct fs **ret)
    	}
 	sfs_jiter_destroy(ji);
 
-	// Loop 2 - Forward to redo all operations
+	// Loop 2 - Forward to redo all operations ----------------------------
 
 	result = sfs_jiter_fwdcreate(sfs, &ji);
 	if(result != 0) 
@@ -694,7 +719,7 @@ sfs_domount(void *options, struct device *dev, struct fs **ret)
    	}
 	sfs_jiter_destroy(ji);
 
-	// Loop 3 - Backward to undo uncommitted transactions
+	// Loop 3 - Backward to undo uncommitted transactions -----------------
 
 	result = sfs_jiter_revcreate(sfs, &ji);
 	if(result != 0) 
@@ -713,7 +738,7 @@ sfs_domount(void *options, struct device *dev, struct fs **ret)
    	}
 	sfs_jiter_destroy(ji);
 
-	// Loop 4 - Backward to zero stale user data
+	// Loop 4 - Backward to zero stale user data --------------------------
 
 	result = sfs_jiter_revcreate(sfs, &ji);
 	if(result != 0) 
@@ -732,6 +757,8 @@ sfs_domount(void *options, struct device *dev, struct fs **ret)
    	}
 	sfs_jiter_destroy(ji);
 	
+	bitmap_destroy(user_blocks);
+
 	(void)result;
 	(void)type;
 	(void)lsn;
