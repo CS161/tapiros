@@ -268,11 +268,18 @@ sfs_attachbuf(struct fs *fs, daddr_t diskblock, struct buf *buf)
 	struct sfs_fs *sfs = fs->fs_data;
 	void *olddata;
 
-	(void)sfs;
-	(void)diskblock;
+	struct sfs_data *md = kmalloc(sizeof(struct sfs_data));
+	if(md == NULL) {
+		panic("Couldn't allocate space for buffer metadata\n");
+	}
 
-	/* Install null as the fs-specific buffer data. */
-	olddata = buffer_set_fsdata(buf, NULL);
+	md->sfs = sfs;
+	md->index = diskblock;
+	md->tx = curproc->tx;
+	md->oldlsn = 0;
+	md->newlsn = 0;
+
+	olddata = buffer_set_fsdata(buf, md);
 
 	/* There should have been no fs-specific buffer data beforehand. */
 	KASSERT(olddata == NULL);
@@ -293,8 +300,8 @@ sfs_detachbuf(struct fs *fs, daddr_t diskblock, struct buf *buf)
 	/* Clear the fs-specific metadata by installing null. */
 	bufdata = buffer_set_fsdata(buf, NULL);
 
-	/* The fs-specific buffer data we installed before was just NULL. */
-	KASSERT(bufdata == NULL);
+	KASSERT(bufdata != NULL);
+	kfree(bufdata);
 }
 
 /*

@@ -385,18 +385,22 @@ sfs_blockobj_set(struct sfs_blockobj *bo, uint32_t offset, uint32_t newval)
 	else {
 		uint32_t *idptr;
 
-		// FINISH LATER with buffer metadata
-		//struct sfs_jphys_write32 rec = {curproc->tx->tid, sv->sv_ino, 0, newval, offset};
-
 		COMPILE_ASSERT(SFS_DBPERIDB*sizeof(idptr[0]) == SFS_BLOCKSIZE);
 		KASSERT(offset < SFS_DBPERIDB);
 
-		idptr = buffer_map(bo->bo_idblock.id_buf);
-		idptr[offset] = newval;
-		buffer_mark_dirty(bo->bo_idblock.id_buf);
+		struct buf *buf = bo->bo_idblock.id_buf;
+		idptr = buffer_map(buf);
 
-		// FINISH LATER with buffer metadata
-		// sfs_jphys_write(sfs, NULL, NULL, SFS_JPHYS_WRITE32, &rec, sizeof(rec));
+		struct sfs_data *md = buffer_get_fsdata(buf);
+		struct sfs_jphys_write32 rec = {curproc->tx->tid, 	// txid
+										md->index, 			// daddr
+										idptr[offset], 		// old data
+										newval, 			// new data
+										offset};			// offset
+		sfs_jphys_write(md->sfs, NULL, NULL, SFS_JPHYS_WRITE32, &rec, sizeof(rec));
+
+		idptr[offset] = newval;
+		buffer_mark_dirty(bo->bo_idblock.id_buf);	
 	}
 }
 

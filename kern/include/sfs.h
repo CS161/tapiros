@@ -87,6 +87,14 @@ struct tx {
 	bool txend;			// true if TXEND has been issued
 };
 
+struct sfs_data {
+	struct sfs_fs *sfs;	// associated file system
+	daddr_t index;		// disk address
+	struct tx *tx;		// associated transaction
+	uint64_t oldlsn;	// oldest lsn
+	uint64_t newlsn;	// newest lsn
+};
+
 #include <array.h>
 #include <proc.h>
 #include <current.h>
