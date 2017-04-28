@@ -397,6 +397,8 @@ sfs_unmount(struct fs *fs)
 	lock_release(sfs->sfs_vnlock);
 	lock_release(sfs->sfs_freemaplock);
 
+	VOP_DECREF(&sfs->purgatory->sv_absvn);
+
 	/* Destroy the fs object; once we start nuking stuff we can't fail. */
 	sfs_fs_destroy(sfs);
 
@@ -906,11 +908,12 @@ sfs_domount(void *options, struct device *dev, struct fs **ret)
 	/*        Empty out purgatory         */
 
 	// get purgatory directory
-	struct sfs_vnode *sv;
-	int err = sfs_loadvnode(sfs, SFS_PURGDIR_INO, SFS_TYPE_INVAL, &sv);
+
+	int err = sfs_loadvnode(sfs, SFS_PURGDIR_INO, SFS_TYPE_INVAL, &sfs->purgatory);
 	if(err)
 		panic("Purgatory directory open failed\n");
 
+	struct sfs_vnode *sv = sfs->purgatory;
 	lock_acquire(sv->sv_lock);
 
 	// find number of entries in purgatory
@@ -946,10 +949,7 @@ sfs_domount(void *options, struct device *dev, struct fs **ret)
 			panic("Couldn't load vnode for file in purgatory directory\n");
 		}
 
-		err = sfs_reclaim(&direntry->sv_absvn);
-		if(err) {
-			panic("Reclaim of file in purgatory failed\n");
-		}
+		VOP_DECREF(&direntry->sv_absvn);
 	}
 
 	sfs_checkpoint(0);

@@ -73,9 +73,10 @@ struct sfs_fs {
 	struct vnodearray *sfs_vnodes;  /* vnodes loaded into memory */
 	struct bitmap *sfs_freemap;     /* blocks in use are marked 1 */
 	bool sfs_freemapdirty;          /* true if freemap modified */
-	struct lock *sfs_vnlock;	/* lock for vnode table */
+	struct lock *sfs_vnlock;		/* lock for vnode table */
 	struct lock *sfs_freemaplock;	/* lock for freemap/superblock */
 	struct lock *sfs_renamelock;	/* lock for sfs_rename() */
+	struct sfs_vnode *purgatory;	/* purgatory sfs_vnode */
 
 	struct sfs_jphys *sfs_jphys;	/* physical journal container */
 };

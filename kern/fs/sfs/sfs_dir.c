@@ -287,36 +287,22 @@ sfs_dir_link(struct sfs_vnode *sv, const char *name, uint32_t ino, int *slot)
 int
 sfs_dir_unlink(struct sfs_vnode *sv, int slot)
 {
+	struct sfs_fs *sfs = sv->sv_absvn.vn_fs->fs_data;
+
 	bool nested = true;
 	if(curproc->tx == NULL) {	// don't nest transactions
-		sfs_txstart(sv->sv_absvn.vn_fs->fs_data, SFS_JPHYS_DIR_UNLINK);
+		sfs_txstart(sfs, SFS_JPHYS_DIR_UNLINK);
 		nested = false;
 	}
-	/*
-	struct sfs_direntry sd;
-
-	KASSERT(lock_do_i_hold(sv->sv_lock));
-
-	// Initialize a suitable directory entry...
-	bzero(&sd, sizeof(sd));
-	sd.sfd_ino = SFS_NOINO;
-
-	// ... and write it
-	int ret = sfs_writedir(sv, slot, &sd);
-	*/
 
 	// get purgatory directory
-	struct sfs_vnode *purgatory;
-	int err = sfs_loadvnode(sv->sv_absvn.vn_fs->fs_data, SFS_PURGDIR_INO, SFS_TYPE_INVAL, &purgatory);
-	if(err)
-		panic("Purgatory directory open failed\n");
-
+	struct sfs_vnode *purgatory = sfs->purgatory;
 	lock_acquire(purgatory->sv_lock);
 
 	// find number of entries in purgatory
 	int nentries, i;
 	struct sfs_direntry tsd;
-	err = sfs_dir_nentries(purgatory, &nentries);
+	int err = sfs_dir_nentries(purgatory, &nentries);
 	if (err) {
 		panic("Purgatory directory doesn't have a number of entries...\n");
 	}
@@ -337,10 +323,6 @@ sfs_dir_unlink(struct sfs_vnode *sv, int slot)
 
 	struct sfs_direntry newsd;
 	newsd.sfd_ino = tsd.sfd_ino;
-
-	// use the inode as a null-terminated, unique name for each file in the purgatory
-	// there's probably a nicer-looking way to do this, but whatever
-
 	snprintf(newsd.sfd_name, SFS_NAMELEN, "%u", tsd.sfd_ino);
 
 	struct sfs_direntry emptysd;
@@ -348,8 +330,7 @@ sfs_dir_unlink(struct sfs_vnode *sv, int slot)
 	emptysd.sfd_ino = SFS_NOINO;
 
 	err = sfs_writedir(purgatory, i, &newsd);
-	if(err == 0)
-		err = sfs_writedir(sv, slot, &emptysd);
+	err = sfs_writedir(sv, slot, &emptysd);
 
 	lock_release(purgatory->sv_lock);
 	

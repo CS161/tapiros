@@ -273,6 +273,26 @@ sfs_reclaim(struct vnode *v)
 		/* Discard the inode */
 		buffer_drop(&sfs->sfs_absfs, sv->sv_ino, SFS_BLOCKSIZE);
 		sfs_bfree_prelocked(sfs, sv->sv_ino);
+
+		struct sfs_vnode *purgatory = sfs->purgatory;
+
+		struct sfs_direntry emptysd;
+		bzero(&emptysd, sizeof(emptysd));
+		emptysd.sfd_ino = SFS_NOINO;
+
+		lock_acquire(purgatory->sv_lock);
+
+		int slot;
+		int err = sfs_dir_findino(purgatory, sv->sv_ino, NULL, &slot);
+		if(err)
+			panic("reclaim called on vnode that isn't unlinked\n");
+
+		err = sfs_writedir(purgatory, slot, &emptysd);
+		if(err) 
+			panic("writedir in reclaim failed\n");
+
+		lock_release(purgatory->sv_lock);
+
 		sfs_unlock_freemap(sfs);
 	}
 	else {
