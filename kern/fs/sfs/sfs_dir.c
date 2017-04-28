@@ -287,23 +287,31 @@ sfs_dir_link(struct sfs_vnode *sv, const char *name, uint32_t ino, int *slot)
 int
 sfs_dir_unlink(struct sfs_vnode *sv, int slot)
 {
-	struct sfs_direntry sd;
-
 	bool nested = true;
 	if(curproc->tx == NULL) {	// don't nest transactions
 		sfs_txstart(sv->sv_absvn.vn_fs->fs_data, SFS_JPHYS_DIR_UNLINK);
 		nested = false;
 	}
 
+	struct sfs_direntry sd;
+
 	KASSERT(lock_do_i_hold(sv->sv_lock));
 
-	/* Initialize a suitable directory entry... */
+	// Initialize a suitable directory entry...
 	bzero(&sd, sizeof(sd));
 	sd.sfd_ino = SFS_NOINO;
 
-	/* ... and write it */
+	// ... and write it
 	int ret = sfs_writedir(sv, slot, &sd);
 
+	/*
+	int slot;
+	err = sfs_dir_findname(sv, "dummy", NULL, NULL, &slot);
+	if(err != ENOENT) {
+		panic("Purgatory has no empty slots\n");
+	}
+	*/
+	
 	if(!nested) {
 		sfs_txend(sv->sv_absvn.vn_fs->fs_data, SFS_JPHYS_DIR_UNLINK);
 	}

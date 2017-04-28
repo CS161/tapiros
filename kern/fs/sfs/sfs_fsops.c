@@ -877,6 +877,8 @@ sfs_domount(void *options, struct device *dev, struct fs **ret)
 	
 	bitmap_destroy(user_blocks);
 
+	sfs_checkpoint(0);
+
 	(void)lsn;
 
 	/*       Recovery code end      */
@@ -901,7 +903,58 @@ sfs_domount(void *options, struct device *dev, struct fs **ret)
 	reserve_buffers(SFS_BLOCKSIZE);
 
 	/**************************************/
-	/* Clear out purgatory */
+	/*        Empty out purgatory         */
+
+	// get purgatory directory
+	struct sfs_vnode *sv;
+	int err = sfs_loadvnode(sfs, SFS_PURGDIR_INO, SFS_TYPE_INVAL, &sv);
+	if(err)
+		panic("Purgatory directory open failed\n");
+
+	lock_acquire(sv->sv_lock);
+
+	// find number of entries in purgatory
+	int nentries, i;
+	struct sfs_direntry tsd;
+	err = sfs_dir_nentries(sv, &nentries);
+	if (err) {
+		panic("Purgatory directory doesn't have a number of entries...\n");
+	}
+
+	lock_release(sv->sv_lock);
+
+	// iterate over entries in purgatory and reclaim them
+	struct sfs_vnode *direntry;
+	for (i = 0; i < nentries; i++) {
+		lock_acquire(sv->sv_lock);
+
+		err = sfs_readdir(sv, i, &tsd);
+		if(err) {
+			panic("Couldn't read file from purgatory directory\n");
+		}
+
+		lock_release(sv->sv_lock);
+
+		if (tsd.sfd_ino == SFS_NOINO) {	// skip empty slots
+			continue;
+		}
+		if (strcmp(tsd.sfd_name, ".") || strcmp(tsd.sfd_name, "..")) {	// skip '.' or '..' entries, which we want to stay
+			continue;
+		}
+		err = sfs_loadvnode(sfs, tsd.sfd_ino, SFS_TYPE_INVAL, &direntry);
+		if(err) {
+			panic("Couldn't load vnode for file in purgatory directory\n");
+		}
+
+		err = sfs_reclaim(&direntry->sv_absvn);
+		if(err) {
+			panic("Reclaim of file in purgatory failed\n");
+		}
+	}
+
+	sfs_checkpoint(0);
+
+	/*      Purgatory should be empty     */
 	/**************************************/
 
 	unreserve_buffers(SFS_BLOCKSIZE);

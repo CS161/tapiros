@@ -2262,6 +2262,11 @@ void sfs_txend(struct sfs_fs *sfs, uint8_t type) {
 	return;
 }
 
+void sfs_checkpoint(uint64_t lsn) {
+	(void) lsn;
+	return;
+}
+
 #define ADLER_MAGIC 65521
 
 // *** buf is SFS_BLOCKSIZE bytes long
