@@ -292,7 +292,7 @@ sfs_dir_unlink(struct sfs_vnode *sv, int slot)
 		sfs_txstart(sv->sv_absvn.vn_fs->fs_data, SFS_JPHYS_DIR_UNLINK);
 		nested = false;
 	}
-	
+	/*
 	struct sfs_direntry sd;
 
 	KASSERT(lock_do_i_hold(sv->sv_lock));
@@ -303,8 +303,8 @@ sfs_dir_unlink(struct sfs_vnode *sv, int slot)
 
 	// ... and write it
 	int ret = sfs_writedir(sv, slot, &sd);
+	*/
 
-	/*
 	// get purgatory directory
 	struct sfs_vnode *purgatory;
 	int err = sfs_loadvnode(sv->sv_absvn.vn_fs->fs_data, SFS_PURGDIR_INO, SFS_TYPE_INVAL, &purgatory);
@@ -340,11 +340,8 @@ sfs_dir_unlink(struct sfs_vnode *sv, int slot)
 
 	// use the inode as a null-terminated, unique name for each file in the purgatory
 	// there's probably a nicer-looking way to do this, but whatever
-	newsd.sfd_name[0] = (tsd.sfd_ino << 24) >> 24;
-	newsd.sfd_name[1] = (tsd.sfd_ino << 16) >> 24;
-	newsd.sfd_name[2] = (tsd.sfd_ino << 8) >> 24;
-	newsd.sfd_name[3] = tsd.sfd_ino >> 24;
-	newsd.sfd_name[4] = 0;
+
+	snprintf(newsd.sfd_name, SFS_NAMELEN, "%u", tsd.sfd_ino);
 
 	struct sfs_direntry emptysd;
 	bzero(&emptysd, sizeof(emptysd));
@@ -354,13 +351,13 @@ sfs_dir_unlink(struct sfs_vnode *sv, int slot)
 	if(err == 0)
 		err = sfs_writedir(sv, slot, &emptysd);
 
-	lock_release(purgatory->sv_lock);*/
+	lock_release(purgatory->sv_lock);
 	
 	if(!nested) {
 		sfs_txend(sv->sv_absvn.vn_fs->fs_data, SFS_JPHYS_DIR_UNLINK);
 	}
 
-	return ret;
+	return err;
 }
 
 /*
