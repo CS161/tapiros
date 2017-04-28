@@ -475,6 +475,38 @@ pass1_rootdir(void)
 	pass1_dir(SFS_ROOTDIR_INO, path);
 }
 
+/*
+ * Check the purgatory directory, and implicitly everything under it.
+ */
+static
+void
+pass1_purgdir(void)
+{
+	struct sfs_dinode sfi;
+	char path[SFS_VOLNAME_SIZE + 2];
+
+	sfs_readinode(SFS_PURGDIR_INO, &sfi);
+
+	switch (sfi.sfi_type) {
+	    case SFS_TYPE_DIR:
+		break;
+	    case SFS_TYPE_FILE:
+		warnx("Purgatory directory inode is a regular file (fixed)");
+		goto fix;
+	    default:
+		warnx("Purgatory directory inode has invalid type %lu (fixed)",
+		      (unsigned long) sfi.sfi_type);
+	    fix:
+		setbadness(EXIT_RECOV);
+		sfi.sfi_type = SFS_TYPE_DIR;
+		sfs_writeinode(SFS_PURGDIR_INO, &sfi);
+		break;
+	}
+
+	snprintf(path, sizeof(path), "%s:", sb_volname());
+	pass1_dir(SFS_PURGDIR_INO, path);
+}
+
 ////////////////////////////////////////////////////////////
 // public interface
 
@@ -482,6 +514,7 @@ void
 pass1(void)
 {
 	pass1_rootdir();
+	pass1_purgdir();
 }
 
 unsigned long

@@ -877,10 +877,7 @@ sfs_domount(void *options, struct device *dev, struct fs **ret)
 	
 	bitmap_destroy(user_blocks);
 
-	(void)result;
-	(void)type;
 	(void)lsn;
-	(void)recptr;
 
 	/*       Recovery code end      */
 	/********************************/

@@ -286,7 +286,7 @@ writepurgdir(void)
 
 	sfi.sfi_size = SWAP32(sizeof(struct sfs_direntry) * 2);
 	sfi.sfi_type = SWAP16(SFS_TYPE_DIR);
-	sfi.sfi_linkcount = SWAP16(0);
+	sfi.sfi_linkcount = SWAP16(2);
 	sfi.sfi_direct[0] = SWAP32(purgdir_data_block);
 
 	/* Write it out */
@@ -294,6 +294,11 @@ writepurgdir(void)
 
 	/* Write out the initial purgatory directory contents */
 	bzero((void *)sfd, sizeof(sfd));
+	sfd[0].sfd_ino = SWAP32(SFS_PURGDIR_INO);
+	strcpy(sfd[0].sfd_name, ".");
+	sfd[1].sfd_ino = SWAP32(SFS_PURGDIR_INO);
+	strcpy(sfd[1].sfd_name, "..");
+
 
 	diskwrite(sfd, purgdir_data_block);
 }

@@ -322,4 +322,5 @@ pass2(void)
 
 	snprintf(path, sizeof(path), "%s:", sb_volname());
 	pass2_dir(SFS_ROOTDIR_INO, SFS_ROOTDIR_INO, path);
+	pass2_dir(SFS_PURGDIR_INO, SFS_PURGDIR_INO, path);
 }
