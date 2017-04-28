@@ -292,7 +292,7 @@ sfs_dir_unlink(struct sfs_vnode *sv, int slot)
 		sfs_txstart(sv->sv_absvn.vn_fs->fs_data, SFS_JPHYS_DIR_UNLINK);
 		nested = false;
 	}
-
+	
 	struct sfs_direntry sd;
 
 	KASSERT(lock_do_i_hold(sv->sv_lock));
@@ -305,12 +305,56 @@ sfs_dir_unlink(struct sfs_vnode *sv, int slot)
 	int ret = sfs_writedir(sv, slot, &sd);
 
 	/*
-	int slot;
-	err = sfs_dir_findname(sv, "dummy", NULL, NULL, &slot);
-	if(err != ENOENT) {
-		panic("Purgatory has no empty slots\n");
+	// get purgatory directory
+	struct sfs_vnode *purgatory;
+	int err = sfs_loadvnode(sv->sv_absvn.vn_fs->fs_data, SFS_PURGDIR_INO, SFS_TYPE_INVAL, &purgatory);
+	if(err)
+		panic("Purgatory directory open failed\n");
+
+	lock_acquire(purgatory->sv_lock);
+
+	// find number of entries in purgatory
+	int nentries, i;
+	struct sfs_direntry tsd;
+	err = sfs_dir_nentries(purgatory, &nentries);
+	if (err) {
+		panic("Purgatory directory doesn't have a number of entries...\n");
 	}
-	*/
+
+	// iterate over entries in purgatory and find a free slot
+	for (i = 0; i < nentries; i++) {
+		err = sfs_readdir(purgatory, i, &tsd);
+		if(err) {
+			panic("Couldn't read file from purgatory directory\n");
+		}
+		if (tsd.sfd_ino == SFS_NOINO) {	// find empty slot
+			break;
+		}
+	}
+	// or if no empty slots in the middle, use the next one (nentries)
+
+	err = sfs_readdir(sv, slot, &tsd);
+
+	struct sfs_direntry newsd;
+	newsd.sfd_ino = tsd.sfd_ino;
+
+	// use the inode as a null-terminated, unique name for each file in the purgatory
+	// there's probably a nicer-looking way to do this, but whatever
+	newsd.sfd_name[0] = (tsd.sfd_ino << 24) >> 24;
+	newsd.sfd_name[1] = (tsd.sfd_ino << 16) >> 24;
+	newsd.sfd_name[2] = (tsd.sfd_ino << 8) >> 24;
+	newsd.sfd_name[3] = tsd.sfd_ino >> 24;
+	newsd.sfd_name[4] = 0;
+
+	struct sfs_direntry emptysd;
+	bzero(&emptysd, sizeof(emptysd));
+	emptysd.sfd_ino = SFS_NOINO;
+
+	err = sfs_writedir(purgatory, i, &newsd);
+	if(err == 0)
+		err = sfs_writedir(sv, slot, &emptysd);
+
+	lock_release(purgatory->sv_lock);*/
 	
 	if(!nested) {
 		sfs_txend(sv->sv_absvn.vn_fs->fs_data, SFS_JPHYS_DIR_UNLINK);

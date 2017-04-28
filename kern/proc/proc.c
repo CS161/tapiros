@@ -119,6 +119,7 @@ proc_create(const char *name)
 	proc->p_cwd = NULL;
 	proc->p_parent = NULL;
 	proc->exit_code = -1;
+	proc->tx = NULL;
 
 	memset(proc->p_fds, -1, OPEN_MAX * sizeof(int));		// default value of per-process fd is -1
 
