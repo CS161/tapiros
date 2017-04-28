@@ -373,11 +373,20 @@ sfs_unmount(struct fs *fs)
 	lock_acquire(sfs->sfs_freemaplock);
 
 	/* Do we have any files open? If so, can't unmount. */
-	if (vnodearray_num(sfs->sfs_vnodes) > 0) {
+	if (vnodearray_num(sfs->sfs_vnodes) > 1) {
 		lock_release(sfs->sfs_freemaplock);
 		lock_release(sfs->sfs_vnlock);
 		return EBUSY;
 	}
+
+	lock_release(sfs->sfs_vnlock);
+	lock_release(sfs->sfs_freemaplock);
+
+	VOP_DECREF(&sfs->purgatory->sv_absvn);
+	sfs_checkpoint(0);
+
+	lock_acquire(sfs->sfs_vnlock);
+	lock_acquire(sfs->sfs_freemaplock);
 
 	sfs_jphys_stopwriting(sfs);
 
@@ -396,8 +405,6 @@ sfs_unmount(struct fs *fs)
 	/* Release the locks. VFS guarantees we can do this safely. */
 	lock_release(sfs->sfs_vnlock);
 	lock_release(sfs->sfs_freemaplock);
-
-	VOP_DECREF(&sfs->purgatory->sv_absvn);
 
 	/* Destroy the fs object; once we start nuking stuff we can't fail. */
 	sfs_fs_destroy(sfs);
