@@ -2273,12 +2273,26 @@ void sfs_checkpoint(struct sfs_fs *sfs, uint64_t lsn) {
 	}
 }
 
-// NULL buf pointer means freemap
+// NULL buf pointer means the freemap was modified, otherwise it's a normal buf
+// Should only be called with exclusive access to a buffer or the freemap so metadata updates are atomic
 void sfs_jphys_write_with_fsdata(struct sfs_fs *sfs, unsigned code, const void *rec, size_t len, struct buf *buf) {
 	uint64_t lsn = sfs_jphys_write(sfs, NULL, NULL, code, rec, len);
-	if(lsn == 0)
+	if(lsn == 0)	// unnecessary write during recovery
 		return;
-	(void) buf;
+	
+	struct sfs_data *md;
+	if(buf == NULL)
+		md = &sfs->freemap_md;
+	else
+		md = buffer_get_fsdata(buf);
+
+	if(md->oldlsn == 0)
+		md->oldlsn = lsn;
+	if(lsn > md->newlsn)
+		md->newlsn = lsn;
+
+	if(buf != NULL)
+		buffer_set_fsdata(buf, md);
 }
 
 #define ADLER_MAGIC 65521
