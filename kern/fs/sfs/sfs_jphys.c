@@ -2246,7 +2246,6 @@ void sfs_txendcb(struct sfs_fs *sfs, sfs_lsn_t newlsn, struct sfs_jphys_writecon
 	lock_release(tx_lock);
 
 	curproc->tx = NULL;
-	return;
 }
 
 // *** Transactions cannot be nested. Enforce in the calling function.
@@ -2254,8 +2253,8 @@ void sfs_txstart(struct sfs_fs *sfs, uint8_t type) {
 	KASSERT(curproc->tx == NULL);
 
 	struct sfs_jphys_tx rec = {0, type};
-	sfs_jphys_write(sfs, sfs_txstartcb, NULL, SFS_JPHYS_TXSTART, &rec, sizeof(rec));
-	return;
+	uint64_t lsn = sfs_jphys_write(sfs, sfs_txstartcb, NULL, SFS_JPHYS_TXSTART, &rec, sizeof(rec));
+	(void) lsn;
 }
 
 // *** Transactions cannot be nested. Enforce in the calling function.
@@ -2263,15 +2262,23 @@ void sfs_txend(struct sfs_fs *sfs, uint8_t type) {
 	KASSERT(curproc->tx != NULL);
 
 	struct sfs_jphys_tx rec = {curproc->tx->tid, type};
-	sfs_jphys_write(sfs, sfs_txendcb, NULL, SFS_JPHYS_TXEND, &rec, sizeof(rec));
-	return;
+	uint64_t lsn = sfs_jphys_write(sfs, sfs_txendcb, NULL, SFS_JPHYS_TXEND, &rec, sizeof(rec));
+	if(lsn == 0)
+		return;
 }
 
 void sfs_checkpoint(struct sfs_fs *sfs, uint64_t lsn) {
 	if(lsn == 0) {
 		FSOP_SYNC(&sfs->sfs_absfs);
 	}
-	return;
+}
+
+// NULL buf pointer means freemap
+void sfs_jphys_write_with_fsdata(struct sfs_fs *sfs, unsigned code, const void *rec, size_t len, struct buf *buf) {
+	uint64_t lsn = sfs_jphys_write(sfs, NULL, NULL, code, rec, len);
+	if(lsn == 0)
+		return;
+	(void) buf;
 }
 
 #define ADLER_MAGIC 65521

@@ -378,9 +378,11 @@ sfs_blockobj_set(struct sfs_blockobj *bo, uint32_t offset, uint32_t newval)
 				      sfs->sfs_sb.sb_volname,
 				      indirlevel);
 		}
+		sfs_jphys_write_with_fsdata(sfs, SFS_JPHYS_WRITE32, &rec, sizeof(rec), bo->bo_inode.i_sv->sv_dinobuf);
+
 		sfs_dinode_mark_dirty(bo->bo_inode.i_sv);
 
-		sfs_jphys_write(sfs, NULL, NULL, SFS_JPHYS_WRITE32, &rec, sizeof(rec));
+		
 	}
 	else {
 		uint32_t *idptr;
@@ -397,7 +399,7 @@ sfs_blockobj_set(struct sfs_blockobj *bo, uint32_t offset, uint32_t newval)
 										idptr[offset], 		// old data
 										newval, 			// new data
 										offset};			// offset
-		sfs_jphys_write(md->sfs, NULL, NULL, SFS_JPHYS_WRITE32, &rec, sizeof(rec));
+		sfs_jphys_write_with_fsdata(md->sfs, SFS_JPHYS_WRITE32, &rec, sizeof(rec), bo->bo_idblock.id_buf);
 
 		idptr[offset] = newval;
 		buffer_mark_dirty(bo->bo_idblock.id_buf);	
@@ -901,7 +903,7 @@ sfs_discard_subtree(struct sfs_vnode *sv, uint32_t *rootptr, unsigned indir,
 												layers[layer].data[layers[layer].pos], 	// old data
 												0, 										// new data
 												layers[layer].pos * sizeof(daddr_t)};	// offset
-				sfs_jphys_write(sfs, NULL, NULL, SFS_JPHYS_WRITE32, &rec, sizeof(rec));
+				sfs_jphys_write_with_fsdata(sfs, SFS_JPHYS_WRITE32, &rec, sizeof(rec), layers[layer].buf);
 
 				layers[layer].data[layers[layer].pos] = 0;
 				layers[layer].modified = true;
@@ -928,7 +930,7 @@ sfs_discard_subtree(struct sfs_vnode *sv, uint32_t *rootptr, unsigned indir,
 												layers[2].data[layers[2].pos], 		// old data
 												0, 									// new data
 												layers[2].pos * sizeof(daddr_t)};	// offset
-					sfs_jphys_write(sfs, NULL, NULL, SFS_JPHYS_WRITE32, &rec, sizeof(rec));
+					sfs_jphys_write_with_fsdata(sfs, SFS_JPHYS_WRITE32, &rec, sizeof(rec), layers[2].buf);
 
 					layers[2].modified = true;
 					layers[2].data[layers[2].pos] = 0;
@@ -989,7 +991,7 @@ sfs_discard_subtree(struct sfs_vnode *sv, uint32_t *rootptr, unsigned indir,
 												layers[3].data[layers[3].pos], 		// old data
 												0, 									// new data
 												layers[3].pos * sizeof(daddr_t)};	// offset
-				sfs_jphys_write(sfs, NULL, NULL, SFS_JPHYS_WRITE32, &rec, sizeof(rec));
+				sfs_jphys_write_with_fsdata(sfs, SFS_JPHYS_WRITE32, &rec, sizeof(rec), layers[3].buf);
 
 				layers[3].modified = true;
 				layers[3].data[layers[3].pos] = 0;
@@ -1079,7 +1081,7 @@ sfs_discard(struct sfs_vnode *sv,
 											inodeptr->sfi_direct[i],	// old data
 											0, 							// new data
 											(void *)&inodeptr->sfi_direct[i] - (void *)inodeptr};	// offset
-			sfs_jphys_write(sfs, NULL, NULL, SFS_JPHYS_WRITE32, &rec, sizeof(rec));
+			sfs_jphys_write_with_fsdata(sfs, SFS_JPHYS_WRITE32, &rec, sizeof(rec), sv->sv_dinobuf);
 
 			inodeptr->sfi_direct[i] = 0;
 			sfs_dinode_mark_dirty(sv);
@@ -1167,7 +1169,7 @@ sfs_itrunc(struct sfs_vnode *sv, off_t newlen)
 									inodeptr->sfi_size,			// old data
 									newlen, 					// new data
 									(void *)&inodeptr->sfi_size - (void *)inodeptr};	// offset
-	sfs_jphys_write(sfs, NULL, NULL, SFS_JPHYS_WRITE32, &rec, sizeof(rec));
+	sfs_jphys_write_with_fsdata(sfs, SFS_JPHYS_WRITE32, &rec, sizeof(rec), sv->sv_dinobuf);
 
 	/* Set the file size */
 	inodeptr->sfi_size = newlen;

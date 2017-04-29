@@ -482,6 +482,12 @@ sfs_fs_create(void)
 		goto cleanup_renamelock;
 	}
 
+	/* freemap metadata */
+	sfs->freemap_md.sfs = sfs;
+	sfs->freemap_md.index = SFS_FREEMAP_START; 
+	sfs->freemap_md.oldlsn = 0;
+	sfs->freemap_md.newlsn = 0;
+
 	return sfs;
 
 cleanup_renamelock:

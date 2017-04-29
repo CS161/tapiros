@@ -256,7 +256,7 @@ sfs_partialio(struct sfs_vnode *sv, struct uio *uio,
 		struct sfs_jphys_writeb rec = {curproc->tx->tid, 		// txid
 									   sfs_checksum(ioptr), 	// checksum
 									   diskblock};				// daddr
-		sfs_jphys_write(sfs, NULL, NULL, SFS_JPHYS_WRITEB, &rec, sizeof(rec));
+		sfs_jphys_write_with_fsdata(sfs, SFS_JPHYS_WRITEB, &rec, sizeof(rec), iobuffer);
 
 		buffer_mark_dirty(iobuffer);
 	}
@@ -332,7 +332,7 @@ sfs_blockio(struct sfs_vnode *sv, struct uio *uio)
 		struct sfs_jphys_writeb rec = {curproc->tx->tid, 		// txid
 									   sfs_checksum(ioptr), 	// checksum
 									   diskblock};				// daddr
-		sfs_jphys_write(sfs, NULL, NULL, SFS_JPHYS_WRITEB, &rec, sizeof(rec));
+		sfs_jphys_write_with_fsdata(sfs, SFS_JPHYS_WRITEB, &rec, sizeof(rec), iobuf);
 
 		buffer_mark_valid(iobuf);
 		buffer_mark_dirty(iobuf);
@@ -456,7 +456,7 @@ sfs_io(struct sfs_vnode *sv, struct uio *uio)
 									   inodeptr->sfi_size,		// old data
 									   uio->uio_offset,			// new data
 									   (void *)&inodeptr->sfi_size - (void *)inodeptr};	// offset				
-		sfs_jphys_write(sv->sv_absvn.vn_fs->fs_data, NULL, NULL, SFS_JPHYS_WRITE32, &rec, sizeof(rec));
+		sfs_jphys_write_with_fsdata(sv->sv_absvn.vn_fs->fs_data, SFS_JPHYS_WRITE32, &rec, sizeof(rec), sv->sv_dinobuf);
 
 		inodeptr->sfi_size = uio->uio_offset;
 		sfs_dinode_mark_dirty(sv);
@@ -558,9 +558,8 @@ sfs_metaio(struct sfs_vnode *sv, off_t actualpos, void *data, size_t len,
 			bzero(&rec.old, WRITEM_LEN);
 			memcpy(&rec.old, (ioptr + blockoffset + count), rec.len);
 			memcpy(&rec.new, (data + count), rec.len);
-			// check that this is correct
 
-			sfs_jphys_write(sfs, NULL, NULL, SFS_JPHYS_WRITEM, &rec, sizeof(rec));
+			sfs_jphys_write_with_fsdata(sfs, SFS_JPHYS_WRITEM, &rec, sizeof(rec), iobuf);
 		}
 
 		memcpy(ioptr + blockoffset, data, len);
@@ -575,7 +574,7 @@ sfs_metaio(struct sfs_vnode *sv, off_t actualpos, void *data, size_t len,
 									  	 	dino->sfi_size,		// old data
 									   		endpos,				// new data
 									   		(void *)&dino->sfi_size - (void *)dino};	// offset				
-			sfs_jphys_write(sfs, NULL, NULL, SFS_JPHYS_WRITE32, &rec, sizeof(rec));
+			sfs_jphys_write_with_fsdata(sfs, SFS_JPHYS_WRITE32, &rec, sizeof(rec), sv->sv_dinobuf);
 
 			dino->sfi_size = endpos;
 			sfs_dinode_mark_dirty(sv);

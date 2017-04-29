@@ -62,6 +62,16 @@ struct sfs_vnode {
 	struct lock *sv_lock;		/* lock for vnode */
 };
 
+/* 
+ * Metadata for buffers and freemap
+ */
+struct sfs_data {
+	struct sfs_fs *sfs;	// associated file system
+	daddr_t index;		// disk address
+	uint64_t oldlsn;	// oldest lsn
+	uint64_t newlsn;	// newest lsn
+};
+
 /*
  * In-memory info for a whole fs volume
  */
@@ -77,21 +87,14 @@ struct sfs_fs {
 	struct lock *sfs_freemaplock;	/* lock for freemap/superblock */
 	struct lock *sfs_renamelock;	/* lock for sfs_rename() */
 	struct sfs_vnode *purgatory;	/* purgatory sfs_vnode */
-
 	struct sfs_jphys *sfs_jphys;	/* physical journal container */
+	struct sfs_data freemap_md;		/* freemap metadata */
 };
 
 struct tx {
 	struct sfs_fs *sfs;	// associated file system
 	uint64_t tid;		// transaction id
 	bool txend;			// true if TXEND has been issued
-};
-
-struct sfs_data {
-	struct sfs_fs *sfs;	// associated file system
-	daddr_t index;		// disk address
-	uint64_t oldlsn;	// oldest lsn
-	uint64_t newlsn;	// newest lsn
 };
 
 #include <array.h>

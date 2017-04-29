@@ -425,7 +425,7 @@ sfs_loadvnode(struct sfs_fs *sfs, uint32_t ino, int forcetype,
 									  	dino->sfi_type,		// old data
 									    forcetype,			// new data
 									   	(void *)&dino->sfi_type - (void *)dino};	// offset				
-		sfs_jphys_write(sfs, NULL, NULL, SFS_JPHYS_WRITE16, &rec, sizeof(rec));
+		sfs_jphys_write_with_fsdata(sfs, SFS_JPHYS_WRITE16, &rec, sizeof(rec), dinobuf);
 
 		dino->sfi_type = forcetype;
 		buffer_mark_dirty(dinobuf);
