@@ -130,7 +130,7 @@ sfs_writeblock(struct fs *fs, daddr_t block, void *fsbufdata,
 	bool isjournal;
 	int result;
 
-	(void)fsbufdata;
+	struct sfs_data *md = fsbufdata;
 
 	KASSERT(len == SFS_BLOCKSIZE);
 
@@ -159,6 +159,13 @@ sfs_writeblock(struct fs *fs, daddr_t block, void *fsbufdata,
 		if (result) {
 			return result;
 		}
+	}
+	else if(md != NULL) {
+		KASSERT(md->oldlsn != 0);
+		KASSERT(md->newlsn != 0);
+
+		sfs_jphys_flush(sfs, md->newlsn);
+
 	}
 
 	SFSUIO(&iov, &ku, data, block, UIO_WRITE);
