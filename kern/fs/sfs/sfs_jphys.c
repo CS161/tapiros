@@ -2283,6 +2283,9 @@ void sfs_txend(struct sfs_fs *sfs, uint8_t type) {
 		return;
 }
 
+// Trim up to the specified maximum lsn
+// Checkpointing with an lsn of 0 syncs all data to disk, then clears the journal (and flushes that to disk);
+// this is only intended to be used during mount/unmount
 void sfs_checkpoint(struct sfs_fs *sfs, uint64_t lsn) {
 	if(lsn == 0) {
 		FSOP_SYNC(&sfs->sfs_absfs);

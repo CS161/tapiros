@@ -854,7 +854,30 @@ sfs_domount(void *options, struct device *dev, struct fs **ret)
 		recptr = sfs_jiter_rec(ji, &reclen);
 
      	switch(type) {
-     		case SFS_JPHYS_WRITEB: {
+     		case SFS_JPHYS_ALLOCB: {			// user page allocated, but not even the write record hit disk
+     			struct sfs_jphys_block rec;
+				memcpy(&rec, recptr, sizeof(rec));
+
+				if(bitmap_isset(user_blocks, rec.index)) {
+					struct buf *iobuf;
+					void *ioptr;
+
+					buffer_read(&sfs->sfs_absfs, rec.index, SFS_BLOCKSIZE, &iobuf);
+					ioptr = buffer_map(iobuf);
+
+					SAY("Zeroing out allocated block at index %u\n", (unsigned) rec.index);
+
+					bzero(ioptr, SFS_BLOCKSIZE);
+					buffer_mark_valid(iobuf);
+					buffer_mark_dirty(iobuf);
+					buffer_release(iobuf);
+
+					bitmap_unmark(user_blocks, rec.index);
+				}
+
+				break;
+     		}
+     		case SFS_JPHYS_WRITEB: {			// write record did hit disk
      			struct sfs_jphys_writeb rec;
 				memcpy(&rec, recptr, sizeof(rec));
 
@@ -866,8 +889,8 @@ sfs_domount(void *options, struct device *dev, struct fs **ret)
 					ioptr = buffer_map(iobuf);
 
 					uint32_t disk_checksum = sfs_checksum(ioptr);
-					if(rec.checksum != disk_checksum) {
-						SAY("Zeroing out block at index %u\n", (unsigned) rec.index);
+					if(rec.checksum != disk_checksum) {				// in-place write didn't hit disk
+						SAY("Zeroing out unwritten block at index %u\n", (unsigned) rec.index);
 
 						bzero(ioptr, SFS_BLOCKSIZE);
 						buffer_mark_valid(iobuf);
@@ -915,7 +938,7 @@ sfs_domount(void *options, struct device *dev, struct fs **ret)
 		return result;
 	}
 
-	sfs_checkpoint(sfs, 0);
+	sfs_checkpoint(sfs, 0);	// ensure all recovery is reflected on disk, then clear the journal
 
 	reserve_buffers(SFS_BLOCKSIZE);
 
