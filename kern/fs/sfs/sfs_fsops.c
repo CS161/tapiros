@@ -102,8 +102,11 @@ sfs_freemapio(struct sfs_fs *sfs, enum uio_rw rw)
 		}
 		else {
 			result = sfs_writeblock(&sfs->sfs_absfs,
-						SFS_FREEMAP_START + j, NULL,
+						SFS_FREEMAP_START + j, &sfs->freemap_md,
 						ptr, SFS_BLOCKSIZE);
+
+			sfs->freemap_md.oldlsn = 0;
+			sfs->freemap_md.newlsn = 0;
 		}
 
 		/* If we failed, stop. */

@@ -88,7 +88,7 @@ struct sfs_fs {
 	struct lock *sfs_renamelock;	/* lock for sfs_rename() */
 	struct sfs_vnode *purgatory;	/* purgatory sfs_vnode */
 	struct sfs_jphys *sfs_jphys;	/* physical journal container */
-	struct sfs_data freemap_md;		/* freemap metadata */
+	struct sfs_data freemap_md;		/* freemap metadata, protected by sfs_freemaplock */
 };
 
 struct tx {

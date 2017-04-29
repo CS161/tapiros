@@ -161,11 +161,8 @@ sfs_writeblock(struct fs *fs, daddr_t block, void *fsbufdata,
 		}
 	}
 	else if(md != NULL) {
-		KASSERT(md->oldlsn != 0);
-		KASSERT(md->newlsn != 0);
-
-		sfs_jphys_flush(sfs, md->newlsn);
-
+		if(md->newlsn > 0)
+			sfs_jphys_flush(sfs, md->newlsn);
 	}
 
 	SFSUIO(&iov, &ku, data, block, UIO_WRITE);
