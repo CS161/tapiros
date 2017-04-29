@@ -149,6 +149,22 @@ sfs_jphys_recname(unsigned class, unsigned type)
 		return sfs_jphys_client_recname(type);
 	}
 }
+
+const char *
+sfs_jphys_client_recname(unsigned type) {
+	switch (type) {
+		case SFS_JPHYS_TXSTART: return "txstart";
+		case SFS_JPHYS_TXEND: return "txend";
+		case SFS_JPHYS_ALLOCB: return "allocb";
+		case SFS_JPHYS_FREEB: return "freeb";
+		case SFS_JPHYS_WRITEB: return "writeb";
+		case SFS_JPHYS_WRITE16: return "write16";
+		case SFS_JPHYS_WRITE32: return "write32";
+		case SFS_JPHYS_WRITEM: return "writem";
+		default: return "<unknown>";
+	}
+}
+
 #endif /* SFS_VERBOSE_RECOVERY */
 
 ////////////////////////////////////////////////////////////

@@ -383,10 +383,6 @@ dump_container_record(uint32_t myblock, unsigned myoffset, uint64_t mylsn,
 			printf("WRITEM\n");
 			break;
 		}
-		case SFS_JPHYS_WRITEDIR: {
-			printf("WRITEDIR\n");
-			break;
-		}
 	    default:
 			/* XXX hexdump it */
 			printf("Unknown record type %u\n", type);
@@ -553,16 +549,6 @@ dump_client_record(uint32_t myblock, unsigned myoffset, uint64_t mylsn,
 					(unsigned) rec.len,
 					rec.old, 
 					rec.new);
-			break;
-		}
-		case SFS_JPHYS_WRITEDIR: {
-			struct sfs_jphys_writedir rec;
-			copyandzero(&rec, sizeof(rec), data, len);
-
-			printf("WRITEDIR -> tid: %llu, index: %lu, slot: %lu\n",
-					(unsigned long long) rec.tid, 
-					(unsigned long) rec.index,
-					(unsigned long) rec.slot);
 			break;
 		}
 	    default:

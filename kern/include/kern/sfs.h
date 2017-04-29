@@ -154,7 +154,6 @@ struct sfs_direntry {
 #define SFS_JPHYS_WRITE16	8		// 16 bit metadata write
 #define SFS_JPHYS_WRITE32	9		// 32 bit metadata write
 #define SFS_JPHYS_WRITEM	10		// Large metadata write
-#define SFS_JPHYS_WRITEDIR	11		// Directory write
 
 /* symbolic names for debugging transaction type codes */
 #define SFS_JPHYS_DIR_UNLINK	1	// sfs_dir_unlink()

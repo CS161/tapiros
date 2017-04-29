@@ -667,6 +667,8 @@ sfs_domount(void *options, struct device *dev, struct fs **ret)
 
 	// Loop 1 - Forward to mark user blocks -------------------------------
 
+	SAY("*** Starting loop 1 ***\n\n");
+
 	result = sfs_jiter_fwdcreate(sfs, &ji);
 	if(result != 0) 
 		panic("sfs_jiter_fwdcreate for loop 1 of recovery failed\n");
@@ -701,7 +703,11 @@ sfs_domount(void *options, struct device *dev, struct fs **ret)
    	}
 	sfs_jiter_destroy(ji);
 
+	SAY("\n*** Finishing loop 1 ***\n");
+
 	// Loop 2 - Forward to redo all operations ----------------------------
+
+	SAY("*** Starting loop 2 ***\n\n");
 
 	result = sfs_jiter_fwdcreate(sfs, &ji);
 	if(result != 0) 
@@ -711,6 +717,9 @@ sfs_domount(void *options, struct device *dev, struct fs **ret)
 		type = sfs_jiter_type(ji);
 		lsn = sfs_jiter_lsn(ji);
 		recptr = sfs_jiter_rec(ji, &reclen);
+
+		SAY("Redoing %s\n", sfs_jphys_client_recname(type));
+
 		switch(type) {
 			// REDO
 			case SFS_JPHYS_TXSTART: {
@@ -751,11 +760,6 @@ sfs_domount(void *options, struct device *dev, struct fs **ret)
 				memcpy(&rec, recptr, sizeof(rec));
 				break;
 			}
-			case SFS_JPHYS_WRITEDIR: {	// !!! not currently used
-				struct sfs_jphys_writedir rec;
-				memcpy(&rec, recptr, sizeof(rec));
-				break;
-			}
 			default:
 				break;
 		}
@@ -766,7 +770,11 @@ sfs_domount(void *options, struct device *dev, struct fs **ret)
    	}
 	sfs_jiter_destroy(ji);
 
+	SAY("\n*** Finishing loop 2 ***\n");
+
 	// Loop 3 - Backward to undo uncommitted transactions -----------------
+
+	SAY("*** Starting loop 3 ***\n\n");
 
 	result = sfs_jiter_revcreate(sfs, &ji);
 	if(result != 0) 
@@ -776,6 +784,8 @@ sfs_domount(void *options, struct device *dev, struct fs **ret)
 		type = sfs_jiter_type(ji);
 		lsn = sfs_jiter_lsn(ji);
 		recptr = sfs_jiter_rec(ji, &reclen);
+
+		SAY("Undoing %s\n", sfs_jphys_client_recname(type));
 
      	switch(type) {
      		// UNDO
@@ -818,11 +828,6 @@ sfs_domount(void *options, struct device *dev, struct fs **ret)
 				memcpy(&rec, recptr, sizeof(rec));
 				break;
 			}
-			case SFS_JPHYS_WRITEDIR: {	// !!! not currently used
-				struct sfs_jphys_writedir rec;
-				memcpy(&rec, recptr, sizeof(rec));
-				break;
-			}
 			default:
 				break;
 		}
@@ -833,7 +838,11 @@ sfs_domount(void *options, struct device *dev, struct fs **ret)
    	}
 	sfs_jiter_destroy(ji);
 
+	SAY("\n*** Finishing loop 3 ***\n");
+
 	// Loop 4 - Backward to zero stale user data --------------------------
+
+	SAY("*** Starting loop 4 ***\n\n");
 
 	result = sfs_jiter_revcreate(sfs, &ji);
 	if(result != 0) 
@@ -858,6 +867,8 @@ sfs_domount(void *options, struct device *dev, struct fs **ret)
 
 					uint32_t disk_checksum = sfs_checksum(ioptr);
 					if(rec.checksum != disk_checksum) {
+						SAY("Zeroing out block at index %u\n", (unsigned) rec.index);
+
 						bzero(ioptr, SFS_BLOCKSIZE);
 						buffer_mark_valid(iobuf);
 						buffer_mark_dirty(iobuf);
@@ -882,6 +893,8 @@ sfs_domount(void *options, struct device *dev, struct fs **ret)
 	bitmap_destroy(user_blocks);
 
 	(void)lsn;
+
+	SAY("\n*** Finishing loop 4 ***\n");
 
 	/*       Recovery code end      */
 	/********************************/
@@ -908,6 +921,8 @@ sfs_domount(void *options, struct device *dev, struct fs **ret)
 
 	/**************************************/
 	/*        Empty out purgatory         */
+
+	SAY("*** Emptying out purgatory ***\n");
 
 	// get purgatory directory
 
@@ -951,10 +966,14 @@ sfs_domount(void *options, struct device *dev, struct fs **ret)
 			panic("Couldn't load vnode for file in purgatory directory\n");
 		}
 
+		SAY("Found file in limbo with inode %u\n", (unsigned) tsd.sfd_ino);
+
 		VOP_DECREF(&direntry->sv_absvn);
 	}
 
 	sfs_checkpoint(sfs, 0);
+
+	SAY("*** Done emptying purgatory ***\n");
 
 	/*      Purgatory should be empty     */
 	/**************************************/
