@@ -166,6 +166,7 @@ struct sfs_direntry {
 #define SFS_JPHYS_LINK 			7	// sfs_link()
 #define SFS_JPHYS_RMDIR			8	// sfs_rmdir()
 #define SFS_JPHYS_RENAME		9	// sfs_rename()
+#define SFS_JPHYS_REMOVE		10	// sfs_remove()
 
 
 /* The record header */

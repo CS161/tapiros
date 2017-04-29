@@ -1158,19 +1158,37 @@ sfs_remove(struct vnode *dir, const char *name)
 		goto out_reference;
 	}
 
+	struct sfs_fs *sfs = victim->sv_absvn.vn_fs->fs_data;
+
+	bool nested = true;
+	if(curproc->tx == NULL) {
+		sfs_txstart(sfs, SFS_JPHYS_REMOVE);
+		nested = false;
+	}
+
 	/* Erase its directory entry. */
 	result = sfs_dir_unlink(sv, slot);
 	if (result) {
-		goto out_reference;
+		goto out_trans;
 	}
 
 	/* Decrement the link count. */
 	KASSERT(victim_inodeptr->sfi_linkcount > 0);
 
-	// !!! figure out how this will interact with reclaim
+	struct sfs_jphys_write16 rec = {curproc->tx->tid, 					// txid
+									victim->sv_ino,						// daddr
+									victim_inodeptr->sfi_linkcount,		// old data
+									victim_inodeptr->sfi_linkcount - 1,	// new data
+									(void *)&victim_inodeptr->sfi_linkcount - (void *)victim_inodeptr};	// offset				
+	sfs_jphys_write(sfs, NULL, NULL, SFS_JPHYS_WRITE16, &rec, sizeof(rec));
 
 	victim_inodeptr->sfi_linkcount--;
 	sfs_dinode_mark_dirty(victim);
+	
+out_trans:
+	if(!nested) {
+ 		sfs_txend(sfs, SFS_JPHYS_REMOVE);
+ 	}
 
 out_reference:
 	/* Discard the reference that sfs_lookonce got us */

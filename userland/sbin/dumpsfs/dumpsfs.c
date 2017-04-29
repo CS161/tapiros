@@ -443,6 +443,9 @@ dump_client_record(uint32_t myblock, unsigned myoffset, uint64_t mylsn,
 				case SFS_JPHYS_RENAME:
 					printf("RENAME ");
 					break;
+				case SFS_JPHYS_REMOVE:
+					printf("REMOVE ");
+					break;
 			}
 			printf("-> tid: %llu\n", (unsigned long long) rec.tid);
 			break;
@@ -479,6 +482,9 @@ dump_client_record(uint32_t myblock, unsigned myoffset, uint64_t mylsn,
 					break;
 				case SFS_JPHYS_RENAME:
 					printf("RENAME ");
+					break;
+				case SFS_JPHYS_REMOVE:
+					printf("REMOVE ");
 					break;
 			}
 			printf("-> tid: %llu\n", (unsigned long long) rec.tid);
