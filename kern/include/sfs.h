@@ -84,14 +84,12 @@ struct sfs_fs {
 struct tx {
 	struct sfs_fs *sfs;	// associated file system
 	uint64_t tid;		// transaction id
-	uint8_t nbufs;		// number of associated unflushed buffers
 	bool txend;			// true if TXEND has been issued
 };
 
 struct sfs_data {
 	struct sfs_fs *sfs;	// associated file system
 	daddr_t index;		// disk address
-	struct tx *tx;		// associated transaction
 	uint64_t oldlsn;	// oldest lsn
 	uint64_t newlsn;	// newest lsn
 };

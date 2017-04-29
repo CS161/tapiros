@@ -2223,7 +2223,6 @@ void sfs_txstartcb(struct sfs_fs *sfs, sfs_lsn_t newlsn, struct sfs_jphys_writec
 	struct tx *tx = kmalloc(sizeof(struct tx));
 	tx->sfs = sfs;
 	tx->tid = newlsn;
-	tx->nbufs = 0;
 	tx->txend = false;
 
 	lock_acquire(tx_lock);
@@ -2240,6 +2239,12 @@ void sfs_txendcb(struct sfs_fs *sfs, sfs_lsn_t newlsn, struct sfs_jphys_writecon
 	(void) ctx;
 	(void) sfs;
 	(void) newlsn;
+
+	lock_acquire(tx_lock);
+	curproc->tx->tid = newlsn;
+	curproc->tx->txend = true;
+	lock_release(tx_lock);
+
 	curproc->tx = NULL;
 	return;
 }
@@ -2262,8 +2267,10 @@ void sfs_txend(struct sfs_fs *sfs, uint8_t type) {
 	return;
 }
 
-void sfs_checkpoint(uint64_t lsn) {
-	(void) lsn;
+void sfs_checkpoint(struct sfs_fs *sfs, uint64_t lsn) {
+	if(lsn == 0) {
+		FSOP_SYNC(&sfs->sfs_absfs);
+	}
 	return;
 }
 

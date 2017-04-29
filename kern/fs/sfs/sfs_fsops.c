@@ -258,8 +258,7 @@ sfs_sync(struct fs *fs)
 
 /*
  * Code called when buffers are attached to and detached from the fs.
- * This can allocate and destroy fs-specific buffer data. We don't
- * currently have any, but later changes might want to.
+ * This can allocate and destroy fs-specific buffer data.
  */
 static
 int
@@ -275,15 +274,8 @@ sfs_attachbuf(struct fs *fs, daddr_t diskblock, struct buf *buf)
 
 	md->sfs = sfs;
 	md->index = diskblock;
-	md->tx = curproc->tx;
 	md->oldlsn = 0;
 	md->newlsn = 0;
-
-	if(md->tx != NULL) {
-		lock_acquire(tx_lock);
-		md->tx->nbufs++;
-		lock_release(tx_lock);
-	}
 
 	olddata = buffer_set_fsdata(buf, md);
 
@@ -305,12 +297,6 @@ sfs_detachbuf(struct fs *fs, daddr_t diskblock, struct buf *buf)
 
 	/* Clear the fs-specific metadata by installing null. */
 	bufdata = buffer_set_fsdata(buf, NULL);
-
-	if(bufdata->tx != NULL) {
-		lock_acquire(tx_lock);
-		bufdata->tx->nbufs--;
-		lock_release(tx_lock);
-	}
 
 	KASSERT(bufdata != NULL);
 	kfree(bufdata);
@@ -383,7 +369,7 @@ sfs_unmount(struct fs *fs)
 	lock_release(sfs->sfs_freemaplock);
 
 	VOP_DECREF(&sfs->purgatory->sv_absvn);
-	sfs_checkpoint(0);
+	sfs_checkpoint(sfs, 0);
 
 	lock_acquire(sfs->sfs_vnlock);
 	lock_acquire(sfs->sfs_freemaplock);
@@ -886,8 +872,6 @@ sfs_domount(void *options, struct device *dev, struct fs **ret)
 	
 	bitmap_destroy(user_blocks);
 
-	sfs_checkpoint(0);
-
 	(void)lsn;
 
 	/*       Recovery code end      */
@@ -908,6 +892,8 @@ sfs_domount(void *options, struct device *dev, struct fs **ret)
 		sfs_fs_destroy(sfs);
 		return result;
 	}
+
+	sfs_checkpoint(sfs, 0);
 
 	reserve_buffers(SFS_BLOCKSIZE);
 
@@ -959,7 +945,7 @@ sfs_domount(void *options, struct device *dev, struct fs **ret)
 		VOP_DECREF(&direntry->sv_absvn);
 	}
 
-	sfs_checkpoint(0);
+	sfs_checkpoint(sfs, 0);
 
 	/*      Purgatory should be empty     */
 	/**************************************/
