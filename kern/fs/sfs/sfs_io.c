@@ -556,7 +556,7 @@ sfs_metaio(struct sfs_vnode *sv, off_t actualpos, void *data, size_t len,
 		for(size_t count = 0; count < len; count += WRITEM_LEN) {
 			struct sfs_jphys_writem rec; 
 			rec.tid = curproc->tx->tid;
-			rec.index = sv->sv_ino;
+			rec.index = diskblock;
 			rec.offset = blockoffset + count;
 			rec.len = (count + WRITEM_LEN < len) ? WRITEM_LEN : len - count;
 			bzero(&rec.old, WRITEM_LEN);
