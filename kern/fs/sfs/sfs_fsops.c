@@ -798,7 +798,7 @@ sfs_domount(void *options, struct device *dev, struct fs **ret)
 				if(result != 0)
 					panic("couldn't read from disk at index %u\n", (unsigned) rec.index);
 
-				KASSERT(rec.offset < SFS_BLOCKSIZE - 2); // 16 bits = 2 bytes
+				KASSERT(rec.offset <= SFS_BLOCKSIZE - 2); // 16 bits = 2 bytes
 
 				memcpy(rawdata + rec.offset, &rec.new, 2);
 
@@ -821,7 +821,7 @@ sfs_domount(void *options, struct device *dev, struct fs **ret)
 				if(result != 0)
 					panic("couldn't read from disk at index %u\n", (unsigned) rec.index);
 
-				KASSERT(rec.offset < SFS_BLOCKSIZE - 4); // 32 bits = 4 bytes
+				KASSERT(rec.offset <= SFS_BLOCKSIZE - 4); // 32 bits = 4 bytes
 
 				memcpy(rawdata + rec.offset, &rec.new, 4);
 
@@ -844,7 +844,7 @@ sfs_domount(void *options, struct device *dev, struct fs **ret)
 				if(result != 0)
 					panic("couldn't read from disk at index %u\n", (unsigned) rec.index);
 
-				KASSERT(rec.offset < SFS_BLOCKSIZE - rec.len);
+				KASSERT(rec.offset <= SFS_BLOCKSIZE - rec.len);
 				memcpy(rawdata + rec.offset, &rec.new, rec.len);
 
 				result = sfs_writeblock(&sfs->sfs_absfs, rec.index, NULL, rawdata, SFS_BLOCKSIZE);
@@ -941,7 +941,7 @@ sfs_domount(void *options, struct device *dev, struct fs **ret)
 				if(result != 0)
 					panic("couldn't read from disk at index %u\n", (unsigned) rec.index);
 
-				KASSERT(rec.offset < SFS_BLOCKSIZE - 2); // 16 bits = 2 bytes
+				KASSERT(rec.offset <= SFS_BLOCKSIZE - 2); // 16 bits = 2 bytes
 				memcpy(rawdata + rec.offset, &rec.old, 2);
 
 				result = sfs_writeblock(&sfs->sfs_absfs, rec.index, NULL, rawdata, SFS_BLOCKSIZE);
@@ -963,7 +963,7 @@ sfs_domount(void *options, struct device *dev, struct fs **ret)
 				if(result != 0)
 					panic("couldn't read from disk at index %u\n", (unsigned) rec.index);
 
-				KASSERT(rec.offset < SFS_BLOCKSIZE - 4); // 32 bits = 4 bytes
+				KASSERT(rec.offset <= SFS_BLOCKSIZE - 4); // 32 bits = 4 bytes
 				memcpy(rawdata + rec.offset, &rec.old, 4);
 
 				result = sfs_writeblock(&sfs->sfs_absfs, rec.index, NULL, rawdata, SFS_BLOCKSIZE);
@@ -985,7 +985,7 @@ sfs_domount(void *options, struct device *dev, struct fs **ret)
 				if(result != 0)
 					panic("couldn't read from disk at index %u\n", (unsigned) rec.index);
 
-				KASSERT(rec.offset < SFS_BLOCKSIZE - rec.len);
+				KASSERT(rec.offset <= SFS_BLOCKSIZE - rec.len);
 				memcpy(rawdata + rec.offset, &rec.old, rec.len);
 
 				result = sfs_writeblock(&sfs->sfs_absfs, rec.index, NULL, rawdata, SFS_BLOCKSIZE);
