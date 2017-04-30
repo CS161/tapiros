@@ -459,7 +459,7 @@ sfs_io(struct sfs_vnode *sv, struct uio *uio)
 									   sv->sv_ino,				// daddr
 									   inodeptr->sfi_size,		// old data
 									   uio->uio_offset,			// new data
-									   (void *)&inodeptr->sfi_size - (void *)inodeptr};	// offset				
+									   (void *)&inodeptr->sfi_size - (void *)inodeptr};	// offset			
 		sfs_jphys_write_with_fsdata(sv->sv_absvn.vn_fs->fs_data, SFS_JPHYS_WRITE32, &rec, sizeof(rec), sv->sv_dinobuf);
 
 		inodeptr->sfi_size = uio->uio_offset;
@@ -578,7 +578,7 @@ sfs_metaio(struct sfs_vnode *sv, off_t actualpos, void *data, size_t len,
 									   		sv->sv_ino,			// daddr
 									  	 	dino->sfi_size,		// old data
 									   		endpos,				// new data
-									   		(void *)&dino->sfi_size - (void *)dino};	// offset				
+									   		(void *)&dino->sfi_size - (void *)dino};	// offset		
 			sfs_jphys_write_with_fsdata(sfs, SFS_JPHYS_WRITE32, &rec, sizeof(rec), sv->sv_dinobuf);
 
 			dino->sfi_size = endpos;

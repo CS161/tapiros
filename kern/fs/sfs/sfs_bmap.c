@@ -344,7 +344,7 @@ sfs_blockobj_set(struct sfs_blockobj *bo, uint32_t offset, uint32_t newval)
 				KASSERT(indirnum < SFS_NDIRECT);
 
 				rec.old = dino->sfi_direct[indirnum];
-				rec.offset = (void *)&dino->sfi_direct[indirnum] - (void *)dino;
+				rec.offset = (char *)&dino->sfi_direct[indirnum] - (char *)dino;
 
 				dino->sfi_direct[indirnum] = newval;
 				break;
@@ -352,7 +352,7 @@ sfs_blockobj_set(struct sfs_blockobj *bo, uint32_t offset, uint32_t newval)
 				KASSERT(indirnum == 0);
 
 				rec.old = dino->sfi_indirect;
-				rec.offset = (void *)&dino->sfi_indirect - (void *)dino;
+				rec.offset = (char *)&dino->sfi_indirect - (char *)dino;
 
 				dino->sfi_indirect = newval;
 				break;
@@ -360,7 +360,7 @@ sfs_blockobj_set(struct sfs_blockobj *bo, uint32_t offset, uint32_t newval)
 				KASSERT(indirnum == 0);
 
 				rec.old = dino->sfi_dindirect;
-				rec.offset = (void *)&dino->sfi_dindirect - (void *)dino;
+				rec.offset = (char *)&dino->sfi_dindirect - (char *)dino;
 
 				dino->sfi_dindirect = newval;
 				break;
@@ -368,7 +368,7 @@ sfs_blockobj_set(struct sfs_blockobj *bo, uint32_t offset, uint32_t newval)
 				KASSERT(indirnum == 0);
 
 				rec.old = dino->sfi_tindirect;
-				rec.offset = (void *)&dino->sfi_tindirect - (void *)dino;
+				rec.offset = (char *)&dino->sfi_tindirect - (char *)dino;
 
 				dino->sfi_tindirect = newval;
 				break;
@@ -398,7 +398,7 @@ sfs_blockobj_set(struct sfs_blockobj *bo, uint32_t offset, uint32_t newval)
 										md->index, 			// daddr
 										idptr[offset], 		// old data
 										newval, 			// new data
-										offset};			// offset
+										offset * sizeof(uint32_t)};			// offset
 		sfs_jphys_write_with_fsdata(md->sfs, SFS_JPHYS_WRITE32, &rec, sizeof(rec), bo->bo_idblock.id_buf);
 
 		idptr[offset] = newval;
