@@ -560,6 +560,7 @@ sfs_metaio(struct sfs_vnode *sv, off_t actualpos, void *data, size_t len,
 			rec.offset = blockoffset + count;
 			rec.len = (count + WRITEM_LEN < len) ? WRITEM_LEN : len - count;
 			bzero(&rec.old, WRITEM_LEN);
+			bzero(&rec.new, WRITEM_LEN);
 			memcpy(&rec.old, (ioptr + blockoffset + count), rec.len);
 			memcpy(&rec.new, (data + count), rec.len);
 

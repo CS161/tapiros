@@ -840,7 +840,7 @@ sfs_domount(void *options, struct device *dev, struct fs **ret)
 					break;
 				}
 
-				/*result = sfs_readblock(&sfs->sfs_absfs, rec.index, rawdata, SFS_BLOCKSIZE);
+				result = sfs_readblock(&sfs->sfs_absfs, rec.index, rawdata, SFS_BLOCKSIZE);
 				if(result != 0)
 					panic("couldn't read from disk at index %u\n", (unsigned) rec.index);
 
@@ -848,9 +848,22 @@ sfs_domount(void *options, struct device *dev, struct fs **ret)
 
 				memcpy(rawdata + rec.offset, &rec.new, rec.len);
 
+				kprintf("\nOriginal:\n");
+				for(int i = 0; i < SFS_BLOCKSIZE; i++) {
+					kprintf("%d",(int)rawdata[i]);
+				}
+				kprintf("\nOld:\n");
+				for(int i = 0; i < SFS_BLOCKSIZE; i++) {
+					kprintf("%d",(int)rec.old[i]);
+				}
+				kprintf("\nNew:\n");
+				for(int i = 0; i < SFS_BLOCKSIZE; i++) {
+					kprintf("%d",(int)rec.new[i]);
+				}
+
 				result = sfs_writeblock(&sfs->sfs_absfs, rec.index, NULL, rawdata, SFS_BLOCKSIZE);
 				if(result != 0)
-					panic("couldn't write to disk at index %u\n", (unsigned) rec.index);*/
+					panic("couldn't write to disk at index %u\n", (unsigned) rec.index);
 
 				break;
 			}
@@ -982,7 +995,7 @@ sfs_domount(void *options, struct device *dev, struct fs **ret)
 
 				SAY("Undoing %s\n", sfs_jphys_client_recname(type));
 
-				/*result = sfs_readblock(&sfs->sfs_absfs, rec.index, rawdata, SFS_BLOCKSIZE);
+				result = sfs_readblock(&sfs->sfs_absfs, rec.index, rawdata, SFS_BLOCKSIZE);
 				if(result != 0)
 					panic("couldn't read from disk at index %u\n", (unsigned) rec.index);
 
@@ -991,7 +1004,7 @@ sfs_domount(void *options, struct device *dev, struct fs **ret)
 
 				result = sfs_writeblock(&sfs->sfs_absfs, rec.index, NULL, rawdata, SFS_BLOCKSIZE);
 				if(result != 0)
-					panic("couldn't write to disk at index %u\n", (unsigned) rec.index);*/
+					panic("couldn't write to disk at index %u\n", (unsigned) rec.index);
 
 				break;
 			}
