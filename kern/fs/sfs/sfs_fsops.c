@@ -936,19 +936,18 @@ sfs_domount(void *options, struct device *dev, struct fs **ret)
 				if(tx_finished(commits, ncommits, rec.tid))
 					break;
 
+				SAY("Undoing %s\n", sfs_jphys_client_recname(type));
+
 				result = sfs_readblock(&sfs->sfs_absfs, rec.index, rawdata, SFS_BLOCKSIZE);
 				if(result != 0)
 					panic("couldn't read from disk at index %u\n", (unsigned) rec.index);
 
 				KASSERT(rec.offset < SFS_BLOCKSIZE - 2); // 16 bits = 2 bytes
-
 				memcpy(rawdata + rec.offset, &rec.old, 2);
 
 				result = sfs_writeblock(&sfs->sfs_absfs, rec.index, NULL, rawdata, SFS_BLOCKSIZE);
 				if(result != 0)
 					panic("couldn't write to disk at index %u\n", (unsigned) rec.index);
-
-				SAY("Undoing %s\n", sfs_jphys_client_recname(type));
 
 				break;
 			}
@@ -959,19 +958,18 @@ sfs_domount(void *options, struct device *dev, struct fs **ret)
 				if(tx_finished(commits, ncommits, rec.tid))
 					break;
 
+				SAY("Undoing %s\n", sfs_jphys_client_recname(type));
+
 				result = sfs_readblock(&sfs->sfs_absfs, rec.index, rawdata, SFS_BLOCKSIZE);
 				if(result != 0)
 					panic("couldn't read from disk at index %u\n", (unsigned) rec.index);
 
 				KASSERT(rec.offset < SFS_BLOCKSIZE - 4); // 32 bits = 4 bytes
-
 				memcpy(rawdata + rec.offset, &rec.old, 4);
 
 				result = sfs_writeblock(&sfs->sfs_absfs, rec.index, NULL, rawdata, SFS_BLOCKSIZE);
 				if(result != 0)
 					panic("couldn't write to disk at index %u\n", (unsigned) rec.index);
-
-				SAY("Undoing %s\n", sfs_jphys_client_recname(type));
 
 				break;
 			}
@@ -982,19 +980,18 @@ sfs_domount(void *options, struct device *dev, struct fs **ret)
 				if(tx_finished(commits, ncommits, rec.tid))
 					break;
 
+				SAY("Undoing %s\n", sfs_jphys_client_recname(type));
+
 				/*result = sfs_readblock(&sfs->sfs_absfs, rec.index, rawdata, SFS_BLOCKSIZE);
 				if(result != 0)
 					panic("couldn't read from disk at index %u\n", (unsigned) rec.index);
 
 				KASSERT(rec.offset < SFS_BLOCKSIZE - rec.len);
-
 				memcpy(rawdata + rec.offset, &rec.old, rec.len);
 
 				result = sfs_writeblock(&sfs->sfs_absfs, rec.index, NULL, rawdata, SFS_BLOCKSIZE);
 				if(result != 0)
 					panic("couldn't write to disk at index %u\n", (unsigned) rec.index);*/
-
-				SAY("Undoing %s\n", sfs_jphys_client_recname(type));
 
 				break;
 			}
