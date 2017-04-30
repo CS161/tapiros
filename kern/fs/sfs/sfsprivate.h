@@ -34,7 +34,7 @@
 struct buf; /* in buf.h */
 
 
-//#define SFS_VERBOSE_RECOVERY
+#define SFS_VERBOSE_RECOVERY
 
 
 /* Type for log sequence numbers */

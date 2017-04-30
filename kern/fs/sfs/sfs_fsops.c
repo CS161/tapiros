@@ -738,8 +738,6 @@ sfs_domount(void *options, struct device *dev, struct fs **ret)
 		lsn = sfs_jiter_lsn(ji);
 		recptr = sfs_jiter_rec(ji, &reclen);
 
-		SAY("Redoing %s\n", sfs_jphys_client_recname(type));
-
 		switch(type) {	// REDO
 
 			case SFS_JPHYS_TXSTART: {
@@ -758,11 +756,15 @@ sfs_domount(void *options, struct device *dev, struct fs **ret)
 				struct sfs_jphys_block rec;
 				memcpy(&rec, recptr, sizeof(rec));
 
+				SAY("Redoing %s at index %u\n", sfs_jphys_client_recname(type), (unsigned) rec.index);
+
 				lock_acquire(sfs->sfs_freemaplock);
 
 				// this check is required to prevent crashes for idempotence
-				if(!bitmap_isset(sfs->sfs_freemap, rec.index))	
+				if(!bitmap_isset(sfs->sfs_freemap, rec.index)) {
 					bitmap_mark(sfs->sfs_freemap, rec.index);
+					sfs->sfs_freemapdirty = true;
+				}
 
 				lock_release(sfs->sfs_freemaplock);
 
@@ -772,10 +774,14 @@ sfs_domount(void *options, struct device *dev, struct fs **ret)
 				struct sfs_jphys_block rec;
 				memcpy(&rec, recptr, sizeof(rec));
 
+				SAY("Redoing %s at index %u\n", sfs_jphys_client_recname(type), (unsigned) rec.index);
+
 				lock_acquire(sfs->sfs_freemaplock);
 
-				if(bitmap_isset(sfs->sfs_freemap, rec.index))
+				if(bitmap_isset(sfs->sfs_freemap, rec.index)) {
 					bitmap_unmark(sfs->sfs_freemap, rec.index);
+					sfs->sfs_freemapdirty = true;
+				}
 
 				lock_release(sfs->sfs_freemaplock);
 
@@ -788,6 +794,8 @@ sfs_domount(void *options, struct device *dev, struct fs **ret)
 			case SFS_JPHYS_WRITE16: {
 				struct sfs_jphys_write16 rec;
 				memcpy(&rec, recptr, sizeof(rec));
+
+				SAY("Redoing %s to index %u\n", sfs_jphys_client_recname(type), (unsigned) rec.index);
 
 				if(bitmap_isset(user_blocks, rec.index)) {
 					SAY("Skipping redo because %u will end up being a user block\n", (unsigned) rec.index);
@@ -812,6 +820,8 @@ sfs_domount(void *options, struct device *dev, struct fs **ret)
 				struct sfs_jphys_write32 rec;
 				memcpy(&rec, recptr, sizeof(rec));
 
+				SAY("Redoing %s to index %u\n", sfs_jphys_client_recname(type), (unsigned) rec.index);
+
 				if(bitmap_isset(user_blocks, rec.index)) {
 					SAY("Skipping redo because %u will end up being a user block\n", (unsigned) rec.index);
 					break;
@@ -834,6 +844,8 @@ sfs_domount(void *options, struct device *dev, struct fs **ret)
 			case SFS_JPHYS_WRITEM: {
 				struct sfs_jphys_writem rec;
 				memcpy(&rec, recptr, sizeof(rec));
+
+				SAY("Redoing %s to index %u\n", sfs_jphys_client_recname(type), (unsigned) rec.index);
 
 				if(bitmap_isset(user_blocks, rec.index)) {
 					SAY("Skipping redo because %u will end up being a user block\n", (unsigned) rec.index);
@@ -895,12 +907,14 @@ sfs_domount(void *options, struct device *dev, struct fs **ret)
 				if(tx_finished(commits, ncommits, rec.tid))
 					break;
 
-				SAY("Undoing %s\n", sfs_jphys_client_recname(type));
+				SAY("Undoing %s at index %u\n", sfs_jphys_client_recname(type), (unsigned) rec.index);
 
 				lock_acquire(sfs->sfs_freemaplock);
 
-				if(bitmap_isset(sfs->sfs_freemap, rec.index))
+				if(bitmap_isset(sfs->sfs_freemap, rec.index)) {
 					bitmap_unmark(sfs->sfs_freemap, rec.index);
+					sfs->sfs_freemapdirty = true;
+				}
 
 				lock_release(sfs->sfs_freemaplock);
 
@@ -913,12 +927,14 @@ sfs_domount(void *options, struct device *dev, struct fs **ret)
 				if(tx_finished(commits, ncommits, rec.tid))
 					break;
 
-				SAY("Undoing %s\n", sfs_jphys_client_recname(type));
+				SAY("Undoing %s at index %u\n", sfs_jphys_client_recname(type), (unsigned) rec.index);
 
 				lock_acquire(sfs->sfs_freemaplock);
 
-				if(!bitmap_isset(sfs->sfs_freemap, rec.index))
+				if(!bitmap_isset(sfs->sfs_freemap, rec.index)) {
 					bitmap_mark(sfs->sfs_freemap, rec.index);
+					sfs->sfs_freemapdirty = true;
+				}
 
 				lock_release(sfs->sfs_freemaplock);
 
@@ -935,7 +951,7 @@ sfs_domount(void *options, struct device *dev, struct fs **ret)
 				if(tx_finished(commits, ncommits, rec.tid))
 					break;
 
-				SAY("Undoing %s\n", sfs_jphys_client_recname(type));
+				SAY("Undoing %s to index %u\n", sfs_jphys_client_recname(type), (unsigned) rec.index);
 
 				result = sfs_readblock(&sfs->sfs_absfs, rec.index, rawdata, SFS_BLOCKSIZE);
 				if(result != 0)
@@ -957,7 +973,7 @@ sfs_domount(void *options, struct device *dev, struct fs **ret)
 				if(tx_finished(commits, ncommits, rec.tid))
 					break;
 
-				SAY("Undoing %s\n", sfs_jphys_client_recname(type));
+				SAY("Undoing %s to index %u\n", sfs_jphys_client_recname(type), (unsigned) rec.index);
 
 				result = sfs_readblock(&sfs->sfs_absfs, rec.index, rawdata, SFS_BLOCKSIZE);
 				if(result != 0)
@@ -979,7 +995,7 @@ sfs_domount(void *options, struct device *dev, struct fs **ret)
 				if(tx_finished(commits, ncommits, rec.tid))
 					break;
 
-				SAY("Undoing %s\n", sfs_jphys_client_recname(type));
+				SAY("Undoing %s to index %u\n", sfs_jphys_client_recname(type), (unsigned) rec.index);
 
 				result = sfs_readblock(&sfs->sfs_absfs, rec.index, rawdata, SFS_BLOCKSIZE);
 				if(result != 0)
