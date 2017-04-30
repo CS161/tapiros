@@ -2316,6 +2316,8 @@ void sfs_jphys_write_with_fsdata(struct sfs_fs *sfs, unsigned code, const void *
 // uses the Adler-32 algorithm, described here: https://en.wikipedia.org/wiki/Adler-32
 uint32_t sfs_checksum(const char *buf) {
 
+	KASSERT(buf != NULL);
+
 	uint16_t a = 1, b = 0;
 
 	for(uint32_t i = 0; i < SFS_BLOCKSIZE; i++) {

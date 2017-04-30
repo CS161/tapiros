@@ -290,7 +290,7 @@ sfs_dir_unlink(struct sfs_vnode *sv, int slot)
 	struct sfs_fs *sfs = sv->sv_absvn.vn_fs->fs_data;
 
 	bool nested = true;
-	if(curproc->tx == NULL) {	// don't nest transactions
+	if(curthread->t_proc->tx == NULL) {	// don't nest transactions
 		sfs_txstart(sfs, SFS_JPHYS_DIR_UNLINK);
 		nested = false;
 	}

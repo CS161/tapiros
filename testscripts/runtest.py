@@ -174,6 +174,8 @@ def run(testcommands, outputfile,
 			quit = True
 		if not inshell and cmd == "s":
 			inshell = True
+		if not inshell and cmd == "p emu0:bin/sh":
+			inshell = True
 		if inshell and cmd == "exit":
 			inshell = False
 	if not quit:
