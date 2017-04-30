@@ -507,6 +507,14 @@ fail:
 	return NULL;
 }
 
+static bool tx_finished(uint64_t *commits, size_t ncommits, uint64_t tid) {
+	for(size_t txi = 0; txi < ncommits; txi++) {
+		if(commits[txi] == tid) 
+			return true;
+	}
+	return false;
+}
+
 /*
  * Mount routine.
  *
@@ -748,11 +756,28 @@ sfs_domount(void *options, struct device *dev, struct fs **ret)
 			case SFS_JPHYS_ALLOCB: {
 				struct sfs_jphys_block rec;
 				memcpy(&rec, recptr, sizeof(rec));
+
+				lock_acquire(sfs->sfs_freemaplock);
+
+				// this check is required to prevent crashes for idempotence
+				if(!bitmap_isset(sfs->sfs_freemap, rec.index))	
+					bitmap_mark(sfs->sfs_freemap, rec.index);
+
+				lock_release(sfs->sfs_freemaplock);
+
 				break;
 			}
 			case SFS_JPHYS_FREEB: {
 				struct sfs_jphys_block rec;
 				memcpy(&rec, recptr, sizeof(rec));
+
+				lock_acquire(sfs->sfs_freemaplock);
+
+				if(bitmap_isset(sfs->sfs_freemap, rec.index))
+					bitmap_unmark(sfs->sfs_freemap, rec.index);
+
+				lock_release(sfs->sfs_freemaplock);
+
 				break;
 			}
 			case SFS_JPHYS_WRITEB: {
@@ -817,8 +842,6 @@ sfs_domount(void *options, struct device *dev, struct fs **ret)
 		lsn = sfs_jiter_lsn(ji);
 		recptr = sfs_jiter_rec(ji, &reclen);
 
-		SAY("Undoing %s\n", sfs_jphys_client_recname(type));
-
      	switch(type) {	// UNDO
 
 			case SFS_JPHYS_TXSTART: {
@@ -826,38 +849,80 @@ sfs_domount(void *options, struct device *dev, struct fs **ret)
 				break;
 			}
 			case SFS_JPHYS_TXEND: {
-				struct sfs_jphys_tx rec;
-				memcpy(&rec, recptr, sizeof(rec));
+				// do nothing
 				break;
 			}
 			case SFS_JPHYS_ALLOCB: {
 				struct sfs_jphys_block rec;
 				memcpy(&rec, recptr, sizeof(rec));
+
+				if(tx_finished(commits, ncommits, rec.tid))
+					break;
+
+				SAY("Undoing %s\n", sfs_jphys_client_recname(type));
+
+				lock_acquire(sfs->sfs_freemaplock);
+
+				if(bitmap_isset(sfs->sfs_freemap, rec.index))
+					bitmap_unmark(sfs->sfs_freemap, rec.index);
+
+				lock_release(sfs->sfs_freemaplock);
+
 				break;
 			}
 			case SFS_JPHYS_FREEB: {
 				struct sfs_jphys_block rec;
 				memcpy(&rec, recptr, sizeof(rec));
+
+				if(tx_finished(commits, ncommits, rec.tid))
+					break;
+
+				SAY("Undoing %s\n", sfs_jphys_client_recname(type));
+
+				lock_acquire(sfs->sfs_freemaplock);
+
+				if(!bitmap_isset(sfs->sfs_freemap, rec.index))
+					bitmap_mark(sfs->sfs_freemap, rec.index);
+
+				lock_release(sfs->sfs_freemaplock);
+
 				break;
 			}
 			case SFS_JPHYS_WRITEB: {
-				struct sfs_jphys_writeb rec;
-				memcpy(&rec, recptr, sizeof(rec));
+				// do nothing
 				break;
 			}
 			case SFS_JPHYS_WRITE16: {
 				struct sfs_jphys_write16 rec;
 				memcpy(&rec, recptr, sizeof(rec));
+
+				if(tx_finished(commits, ncommits, rec.tid))
+					break;
+
+				SAY("Undoing %s\n", sfs_jphys_client_recname(type));
+
 				break;
 			}
 			case SFS_JPHYS_WRITE32: {
 				struct sfs_jphys_write32 rec;
 				memcpy(&rec, recptr, sizeof(rec));
+
+				if(tx_finished(commits, ncommits, rec.tid))
+					break;
+
+				SAY("Undoing %s\n", sfs_jphys_client_recname(type));
+
 				break;
 			}
 			case SFS_JPHYS_WRITEM: {
 				struct sfs_jphys_writem rec;
 				memcpy(&rec, recptr, sizeof(rec));
+
+				if(tx_finished(commits, ncommits, rec.tid))
+					break;
+
+				SAY("Undoing %s\n", sfs_jphys_client_recname(type));
+				
 				break;
 			}
 			default:
@@ -871,9 +936,6 @@ sfs_domount(void *options, struct device *dev, struct fs **ret)
 	sfs_jiter_destroy(ji);
 
 	SAY("\n*** Finishing loop 3 ***\n");
-
-	for(size_t i = 0; i < ncommits; i++)
-		kprintf("%llu\n", (unsigned long long) commits[i]);
 
 	kfree(commits);
 
