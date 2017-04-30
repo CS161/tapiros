@@ -2266,8 +2266,6 @@ void sfs_txendcb(struct sfs_fs *sfs, sfs_lsn_t newlsn, struct sfs_jphys_writecon
 
 // *** Transactions cannot be nested. Enforce in the calling function.
 void sfs_txstart(struct sfs_fs *sfs, uint8_t type) {
-	KASSERT(curproc->tx == NULL);
-
 	struct sfs_jphys_tx rec = {0, type};
 	uint64_t lsn = sfs_jphys_write(sfs, sfs_txstartcb, NULL, SFS_JPHYS_TXSTART, &rec, sizeof(rec));
 	(void) lsn;
@@ -2275,8 +2273,6 @@ void sfs_txstart(struct sfs_fs *sfs, uint8_t type) {
 
 // *** Transactions cannot be nested. Enforce in the calling function.
 void sfs_txend(struct sfs_fs *sfs, uint8_t type) {
-	KASSERT(curproc->tx != NULL);
-
 	struct sfs_jphys_tx rec = {curproc->tx->tid, type};
 	uint64_t lsn = sfs_jphys_write(sfs, sfs_txendcb, NULL, SFS_JPHYS_TXEND, &rec, sizeof(rec));
 	if(lsn == 0)

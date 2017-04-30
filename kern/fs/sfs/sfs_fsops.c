@@ -668,12 +668,12 @@ sfs_domount(void *options, struct device *dev, struct fs **ret)
 	void *recptr;
 	size_t reclen;
 
+	size_t ncommits = 0;
+
 	struct bitmap *user_blocks = bitmap_create(SFS_FS_FREEMAPBITS(sfs));
 	if (user_blocks == NULL) {
 		panic("bitmap_create for recovery failed\n");
 	}
-
-	size_t ncommits = 0;
 
 	// Loop 1 - Forward to mark user blocks -------------------------------
 	//			(and count committed transactions)
@@ -723,6 +723,7 @@ sfs_domount(void *options, struct device *dev, struct fs **ret)
 	// Loop 2 - Forward to redo all operations ----------------------------
 	//			(and populate an array of all committed operations)
 
+	char *rawdata = kmalloc(SFS_BLOCKSIZE);
 	uint64_t *commits = kmalloc(sizeof(uint64_t) * ncommits);
 	size_t txi = 0;
 
@@ -793,6 +794,18 @@ sfs_domount(void *options, struct device *dev, struct fs **ret)
 					break;
 				}
 
+				result = sfs_readblock(&sfs->sfs_absfs, rec.index, rawdata, SFS_BLOCKSIZE);
+				if(result != 0)
+					panic("couldn't read from disk at index %u\n", (unsigned) rec.index);
+
+				KASSERT(rec.offset < SFS_BLOCKSIZE - 2); // 16 bits = 2 bytes
+
+				memcpy(rawdata + rec.offset, &rec.new, 2);
+
+				result = sfs_writeblock(&sfs->sfs_absfs, rec.index, NULL, rawdata, SFS_BLOCKSIZE);
+				if(result != 0)
+					panic("couldn't write to disk at index %u\n", (unsigned) rec.index);
+
 				break;
 			}
 			case SFS_JPHYS_WRITE32: {
@@ -804,6 +817,18 @@ sfs_domount(void *options, struct device *dev, struct fs **ret)
 					break;
 				}
 
+				result = sfs_readblock(&sfs->sfs_absfs, rec.index, rawdata, SFS_BLOCKSIZE);
+				if(result != 0)
+					panic("couldn't read from disk at index %u\n", (unsigned) rec.index);
+
+				KASSERT(rec.offset < SFS_BLOCKSIZE - 4); // 32 bits = 4 bytes
+
+				memcpy(rawdata + rec.offset, &rec.new, 4);
+
+				result = sfs_writeblock(&sfs->sfs_absfs, rec.index, NULL, rawdata, SFS_BLOCKSIZE);
+				if(result != 0)
+					panic("couldn't write to disk at index %u\n", (unsigned) rec.index);
+
 				break;
 			}
 			case SFS_JPHYS_WRITEM: {
@@ -814,6 +839,18 @@ sfs_domount(void *options, struct device *dev, struct fs **ret)
 					SAY("Skipping redo because %u will end up being a user block\n", (unsigned) rec.index);
 					break;
 				}
+
+				/*result = sfs_readblock(&sfs->sfs_absfs, rec.index, rawdata, SFS_BLOCKSIZE);
+				if(result != 0)
+					panic("couldn't read from disk at index %u\n", (unsigned) rec.index);
+
+				KASSERT(rec.offset < SFS_BLOCKSIZE - rec.len);
+
+				memcpy(rawdata + rec.offset, &rec.new, rec.len);
+
+				result = sfs_writeblock(&sfs->sfs_absfs, rec.index, NULL, rawdata, SFS_BLOCKSIZE);
+				if(result != 0)
+					panic("couldn't write to disk at index %u\n", (unsigned) rec.index);*/
 
 				break;
 			}
@@ -899,6 +936,18 @@ sfs_domount(void *options, struct device *dev, struct fs **ret)
 				if(tx_finished(commits, ncommits, rec.tid))
 					break;
 
+				result = sfs_readblock(&sfs->sfs_absfs, rec.index, rawdata, SFS_BLOCKSIZE);
+				if(result != 0)
+					panic("couldn't read from disk at index %u\n", (unsigned) rec.index);
+
+				KASSERT(rec.offset < SFS_BLOCKSIZE - 2); // 16 bits = 2 bytes
+
+				memcpy(rawdata + rec.offset, &rec.old, 2);
+
+				result = sfs_writeblock(&sfs->sfs_absfs, rec.index, NULL, rawdata, SFS_BLOCKSIZE);
+				if(result != 0)
+					panic("couldn't write to disk at index %u\n", (unsigned) rec.index);
+
 				SAY("Undoing %s\n", sfs_jphys_client_recname(type));
 
 				break;
@@ -909,6 +958,18 @@ sfs_domount(void *options, struct device *dev, struct fs **ret)
 
 				if(tx_finished(commits, ncommits, rec.tid))
 					break;
+
+				result = sfs_readblock(&sfs->sfs_absfs, rec.index, rawdata, SFS_BLOCKSIZE);
+				if(result != 0)
+					panic("couldn't read from disk at index %u\n", (unsigned) rec.index);
+
+				KASSERT(rec.offset < SFS_BLOCKSIZE - 4); // 32 bits = 4 bytes
+
+				memcpy(rawdata + rec.offset, &rec.old, 4);
+
+				result = sfs_writeblock(&sfs->sfs_absfs, rec.index, NULL, rawdata, SFS_BLOCKSIZE);
+				if(result != 0)
+					panic("couldn't write to disk at index %u\n", (unsigned) rec.index);
 
 				SAY("Undoing %s\n", sfs_jphys_client_recname(type));
 
@@ -921,8 +982,20 @@ sfs_domount(void *options, struct device *dev, struct fs **ret)
 				if(tx_finished(commits, ncommits, rec.tid))
 					break;
 
+				/*result = sfs_readblock(&sfs->sfs_absfs, rec.index, rawdata, SFS_BLOCKSIZE);
+				if(result != 0)
+					panic("couldn't read from disk at index %u\n", (unsigned) rec.index);
+
+				KASSERT(rec.offset < SFS_BLOCKSIZE - rec.len);
+
+				memcpy(rawdata + rec.offset, &rec.old, rec.len);
+
+				result = sfs_writeblock(&sfs->sfs_absfs, rec.index, NULL, rawdata, SFS_BLOCKSIZE);
+				if(result != 0)
+					panic("couldn't write to disk at index %u\n", (unsigned) rec.index);*/
+
 				SAY("Undoing %s\n", sfs_jphys_client_recname(type));
-				
+
 				break;
 			}
 			default:
@@ -937,6 +1010,7 @@ sfs_domount(void *options, struct device *dev, struct fs **ret)
 
 	SAY("\n*** Finishing loop 3 ***\n");
 
+	kfree(rawdata);
 	kfree(commits);
 
 	// Loop 4 - Backward to zero stale user data --------------------------
