@@ -665,7 +665,10 @@ sfs_domount(void *options, struct device *dev, struct fs **ret)
 		panic("bitmap_create for recovery failed\n");
 	}
 
+	size_t ncommits = 0;
+
 	// Loop 1 - Forward to mark user blocks -------------------------------
+	//			(and count committed transactions)
 
 	SAY("*** Starting loop 1 ***\n\n");
 
@@ -677,6 +680,10 @@ sfs_domount(void *options, struct device *dev, struct fs **ret)
 		type = sfs_jiter_type(ji);
 		recptr = sfs_jiter_rec(ji, &reclen);
 		switch(type) {
+			case SFS_JPHYS_TXEND: {		// count committed tx
+				ncommits++;
+				break;
+			}
 			case SFS_JPHYS_FREEB: {
 				struct sfs_jphys_block rec;
 				memcpy(&rec, recptr, sizeof(rec));
@@ -706,6 +713,10 @@ sfs_domount(void *options, struct device *dev, struct fs **ret)
 	SAY("\n*** Finishing loop 1 ***\n");
 
 	// Loop 2 - Forward to redo all operations ----------------------------
+	//			(and populate an array of all committed operations)
+
+	uint64_t *commits = kmalloc(sizeof(uint64_t) * ncommits);
+	size_t txi = 0;
 
 	SAY("*** Starting loop 2 ***\n\n");
 
@@ -720,14 +731,18 @@ sfs_domount(void *options, struct device *dev, struct fs **ret)
 
 		SAY("Redoing %s\n", sfs_jphys_client_recname(type));
 
-		switch(type) {
-			// REDO
+		switch(type) {	// REDO
+
 			case SFS_JPHYS_TXSTART: {
 				// do nothing
 				break;
 			}
-			case SFS_JPHYS_TXEND: {
-				// do nothing
+			case SFS_JPHYS_TXEND: {		// add committed tx to array
+				struct sfs_jphys_tx rec;
+				memcpy(&rec, recptr, sizeof(rec));
+
+				commits[txi] = rec.tid;
+				txi++;
 				break;
 			}
 			case SFS_JPHYS_ALLOCB: {
@@ -741,23 +756,40 @@ sfs_domount(void *options, struct device *dev, struct fs **ret)
 				break;
 			}
 			case SFS_JPHYS_WRITEB: {
-				struct sfs_jphys_writeb rec;
-				memcpy(&rec, recptr, sizeof(rec));
+				// do nothing
 				break;
 			}
 			case SFS_JPHYS_WRITE16: {
 				struct sfs_jphys_write16 rec;
 				memcpy(&rec, recptr, sizeof(rec));
+
+				if(bitmap_isset(user_blocks, rec.index)) {
+					SAY("Skipping redo because %u will end up being a user block\n", (unsigned) rec.index);
+					break;
+				}
+
 				break;
 			}
 			case SFS_JPHYS_WRITE32: {
 				struct sfs_jphys_write32 rec;
 				memcpy(&rec, recptr, sizeof(rec));
+
+				if(bitmap_isset(user_blocks, rec.index)) {
+					SAY("Skipping redo because %u will end up being a user block\n", (unsigned) rec.index);
+					break;
+				}
+
 				break;
 			}
 			case SFS_JPHYS_WRITEM: {
 				struct sfs_jphys_writem rec;
 				memcpy(&rec, recptr, sizeof(rec));
+
+				if(bitmap_isset(user_blocks, rec.index)) {
+					SAY("Skipping redo because %u will end up being a user block\n", (unsigned) rec.index);
+					break;
+				}
+
 				break;
 			}
 			default:
@@ -778,7 +810,7 @@ sfs_domount(void *options, struct device *dev, struct fs **ret)
 
 	result = sfs_jiter_revcreate(sfs, &ji);
 	if(result != 0) 
-		panic("sfs_jiter_revcreate for loop 3 of recoveryfailed\n");
+		panic("sfs_jiter_revcreate for loop 3 of recovery failed\n");
 
 	while (!sfs_jiter_done(ji)) {
 		type = sfs_jiter_type(ji);
@@ -787,8 +819,8 @@ sfs_domount(void *options, struct device *dev, struct fs **ret)
 
 		SAY("Undoing %s\n", sfs_jphys_client_recname(type));
 
-     	switch(type) {
-     		// UNDO
+     	switch(type) {	// UNDO
+
 			case SFS_JPHYS_TXSTART: {
 				// do nothing
 				break;
@@ -839,6 +871,11 @@ sfs_domount(void *options, struct device *dev, struct fs **ret)
 	sfs_jiter_destroy(ji);
 
 	SAY("\n*** Finishing loop 3 ***\n");
+
+	for(size_t i = 0; i < ncommits; i++)
+		kprintf("%llu\n", (unsigned long long) commits[i]);
+
+	kfree(commits);
 
 	// Loop 4 - Backward to zero stale user data --------------------------
 
