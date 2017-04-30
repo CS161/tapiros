@@ -95,7 +95,7 @@ sfs_balloc(struct sfs_fs *sfs, daddr_t *diskblock, struct buf **bufret)
 		return result;
 	}
 
-	struct sfs_jphys_block rec = {curproc->tx->tid, 	// txid
+	struct sfs_jphys_block rec = {curthread->tx->tid, 	// txid
 								  *diskblock};			// daddr
 	sfs_jphys_write_with_fsdata(sfs, SFS_JPHYS_ALLOCB, &rec, sizeof(rec), NULL);
 
@@ -146,7 +146,7 @@ sfs_bfree_prelocked(struct sfs_fs *sfs, daddr_t diskblock)
 
 	bitmap_unmark(sfs->sfs_freemap, diskblock);
 
-	struct sfs_jphys_block rec = {curproc->tx->tid, diskblock};
+	struct sfs_jphys_block rec = {curthread->tx->tid, diskblock};
 	sfs_jphys_write_with_fsdata(sfs, SFS_JPHYS_FREEB, &rec, sizeof(rec), NULL);
 
 	sfs->sfs_freemapdirty = true;

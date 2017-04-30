@@ -100,7 +100,6 @@ struct proc {
 	pid_t pid;						// process id (index for global process array)
 	struct wchan *p_wchan;			// parent waits on child's wchan
 	struct spinlock p_lock;			// lock for this structure
-	struct tx *tx;					// current transaction
 	int p_fds[OPEN_MAX];			// array of file descriptors
 };
 

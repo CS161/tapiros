@@ -2247,7 +2247,7 @@ void sfs_txstartcb(struct sfs_fs *sfs, sfs_lsn_t newlsn, struct sfs_jphys_writec
 		panic("Too many active transactions");
 	lock_release(tx_lock);
 
-	curproc->tx = tx;
+	curthread->tx = tx;
 	return;
 }
 
@@ -2257,11 +2257,11 @@ void sfs_txendcb(struct sfs_fs *sfs, sfs_lsn_t newlsn, struct sfs_jphys_writecon
 	(void) newlsn;
 
 	lock_acquire(tx_lock);
-	curproc->tx->tid = newlsn;
-	curproc->tx->txend = true;
+	curthread->tx->tid = newlsn;
+	curthread->tx->txend = true;
 	lock_release(tx_lock);
 
-	curproc->tx = NULL;
+	curthread->tx = NULL;
 }
 
 // *** Transactions cannot be nested. Enforce in the calling function.
@@ -2273,7 +2273,7 @@ void sfs_txstart(struct sfs_fs *sfs, uint8_t type) {
 
 // *** Transactions cannot be nested. Enforce in the calling function.
 void sfs_txend(struct sfs_fs *sfs, uint8_t type) {
-	struct sfs_jphys_tx rec = {curproc->tx->tid, type};
+	struct sfs_jphys_tx rec = {curthread->tx->tid, type};
 	uint64_t lsn = sfs_jphys_write(sfs, sfs_txendcb, NULL, SFS_JPHYS_TXEND, &rec, sizeof(rec));
 	if(lsn == 0)
 		return;

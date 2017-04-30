@@ -154,6 +154,7 @@ thread_create(const char *name)
 
 	/* VFS fields */
 	thread->t_did_reserve_buffers = false;
+	thread->tx = NULL;
 
 	/* If you add to struct thread, be sure to initialize here */
 

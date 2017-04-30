@@ -179,7 +179,7 @@ sfs_write(struct vnode *v, struct uio *uio)
 	int result;
 
 	bool nested = true;
-	if(curproc->tx == NULL) {
+	if(curthread->tx == NULL) {
 		sfs_txstart(v->vn_fs->fs_data, SFS_JPHYS_WRITE);
 		nested = false;
 	}
@@ -429,7 +429,7 @@ sfs_truncate(struct vnode *v, off_t len)
 	int result;
 
 	bool nested = true;
-	if(curproc->tx == NULL) {
+	if(curthread->tx == NULL) {
 		sfs_txstart(sfs, SFS_JPHYS_TRUNCATE);
 		nested = false;
 	}
@@ -657,7 +657,7 @@ sfs_creat(struct vnode *v, const char *name, bool excl, mode_t mode,
 	}
 
 	bool nested = true;
-	if(curproc->tx == NULL) {
+	if(curthread->tx == NULL) {
 		sfs_txstart(sfs, SFS_JPHYS_CREAT);
 		nested = false;
 	}
@@ -697,7 +697,7 @@ sfs_creat(struct vnode *v, const char *name, bool excl, mode_t mode,
 		return result;
 	}
 
-	struct sfs_jphys_write16 rec = {curproc->tx->tid, 				// txid
+	struct sfs_jphys_write16 rec = {curthread->tx->tid, 			// txid
 									newguy->sv_ino,					// daddr
 									new_dino->sfi_linkcount,		// old data
 									new_dino->sfi_linkcount + 1,	// new data
@@ -767,7 +767,7 @@ sfs_link(struct vnode *dir, const char *name, struct vnode *file)
 	}
 
 	bool nested = true;
-	if(curproc->tx == NULL) {
+	if(curthread->tx == NULL) {
 		sfs_txstart(dir->vn_fs->fs_data, SFS_JPHYS_LINK);
 		nested = false;
 	}
@@ -790,7 +790,7 @@ sfs_link(struct vnode *dir, const char *name, struct vnode *file)
 	/* and update the link count, marking the inode dirty */
 	inodeptr = sfs_dinode_map(f);
 
-	struct sfs_jphys_write16 rec = {curproc->tx->tid, 				// txid
+	struct sfs_jphys_write16 rec = {curthread->tx->tid, 				// txid
 									f->sv_ino,						// daddr
 									inodeptr->sfi_linkcount,		// old data
 									inodeptr->sfi_linkcount + 1,	// new data
@@ -876,7 +876,7 @@ sfs_mkdir(struct vnode *v, const char *name, mode_t mode)
 		      sfs->sfs_sb.sb_volname, name, sv->sv_ino);
 	}
 
-	if(curproc->tx == NULL) {
+	if(curthread->tx == NULL) {
 		sfs_txstart(sfs, SFS_JPHYS_MKDIR);
 		nested = false;
 	}
@@ -912,14 +912,14 @@ sfs_mkdir(struct vnode *v, const char *name, mode_t mode)
          * remove it.
          */
 
-	struct sfs_jphys_write16 rec = {curproc->tx->tid, 					// txid
+	struct sfs_jphys_write16 rec = {curthread->tx->tid, 					// txid
 									newguy->sv_ino,						// daddr
 									new_inodeptr->sfi_linkcount,		// old data
 									new_inodeptr->sfi_linkcount + 2,	// new data
 									(void *)&new_inodeptr->sfi_linkcount - (void *)new_inodeptr};	// offset				
 	sfs_jphys_write_with_fsdata(sfs, SFS_JPHYS_WRITE16, &rec, sizeof(rec), newguy->sv_dinobuf);
 
-	struct sfs_jphys_write16 rec2 = {curproc->tx->tid, 					// txid
+	struct sfs_jphys_write16 rec2 = {curthread->tx->tid, 					// txid
 									sv->sv_ino,							// daddr
 									dir_inodeptr->sfi_linkcount,		// old data
 									dir_inodeptr->sfi_linkcount + 1,	// new data
@@ -1013,7 +1013,7 @@ sfs_rmdir(struct vnode *v, const char *name)
 	}
 
 	bool nested = true;
-	if(curproc->tx == NULL) {
+	if(curthread->tx == NULL) {
 		sfs_txstart(sfs, SFS_JPHYS_RMDIR);
 		nested = false;
 	}
@@ -1044,14 +1044,14 @@ sfs_rmdir(struct vnode *v, const char *name)
 	KASSERT(dir_inodeptr->sfi_linkcount > 1);
 	KASSERT(victim_inodeptr->sfi_linkcount==2);
 
-	struct sfs_jphys_write16 rec = {curproc->tx->tid, 					// txid
+	struct sfs_jphys_write16 rec = {curthread->tx->tid, 					// txid
 									sv->sv_ino,							// daddr
 									dir_inodeptr->sfi_linkcount,		// old data
 									dir_inodeptr->sfi_linkcount - 1,	// new data
 									(void *)&dir_inodeptr->sfi_linkcount - (void *)dir_inodeptr};	// offset				
 	sfs_jphys_write_with_fsdata(sfs, SFS_JPHYS_WRITE16, &rec, sizeof(rec), sv->sv_dinobuf);
 
-	struct sfs_jphys_write16 rec2 = {curproc->tx->tid, 					// txid
+	struct sfs_jphys_write16 rec2 = {curthread->tx->tid, 					// txid
 									victim->sv_ino,						// daddr
 									victim_inodeptr->sfi_linkcount,		// old data
 									victim_inodeptr->sfi_linkcount -2,	// new data
@@ -1161,7 +1161,7 @@ sfs_remove(struct vnode *dir, const char *name)
 	struct sfs_fs *sfs = victim->sv_absvn.vn_fs->fs_data;
 
 	bool nested = true;
-	if(curproc->tx == NULL) {
+	if(curthread->tx == NULL) {
 		sfs_txstart(sfs, SFS_JPHYS_REMOVE);
 		nested = false;
 	}
@@ -1175,7 +1175,7 @@ sfs_remove(struct vnode *dir, const char *name)
 	/* Decrement the link count. */
 	KASSERT(victim_inodeptr->sfi_linkcount > 0);
 
-	struct sfs_jphys_write16 rec = {curproc->tx->tid, 					// txid
+	struct sfs_jphys_write16 rec = {curthread->tx->tid, 					// txid
 									victim->sv_ino,						// daddr
 									victim_inodeptr->sfi_linkcount,		// old data
 									victim_inodeptr->sfi_linkcount - 1,	// new data
@@ -1585,7 +1585,7 @@ sfs_rename(struct vnode *absdir1, const char *name1,
 	 * the operation.
 	 */
 
-	if(curproc->tx == NULL) {
+	if(curthread->tx == NULL) {
 		sfs_txstart(sfs, SFS_JPHYS_RENAME);
 		nested = false;
 	}
@@ -1621,14 +1621,14 @@ sfs_rename(struct vnode *absdir1, const char *name1,
 			KASSERT(dir2_inodeptr->sfi_linkcount > 1);
 			KASSERT(obj2_inodeptr->sfi_linkcount == 2);
 
-			struct sfs_jphys_write16 rec = {curproc->tx->tid, 					// txid
+			struct sfs_jphys_write16 rec = {curthread->tx->tid, 					// txid
 											dir2->sv_ino,						// daddr
 											dir2_inodeptr->sfi_linkcount,		// old data
 											dir2_inodeptr->sfi_linkcount - 1,	// new data
 											(void *)&dir2_inodeptr->sfi_linkcount - (void *)dir2_inodeptr};	// offset				
 			sfs_jphys_write_with_fsdata(sfs, SFS_JPHYS_WRITE16, &rec, sizeof(rec), dir2->sv_dinobuf);
 
-			struct sfs_jphys_write16 rec2 = {curproc->tx->tid, 					// txid
+			struct sfs_jphys_write16 rec2 = {curthread->tx->tid, 					// txid
 											obj2->sv_ino,						// daddr
 											obj2_inodeptr->sfi_linkcount,		// old data
 											obj2_inodeptr->sfi_linkcount - 2,	// new data
@@ -1661,7 +1661,7 @@ sfs_rename(struct vnode *absdir1, const char *name1,
 			/* Dispose of the file */
 			KASSERT(obj2_inodeptr->sfi_linkcount > 0);
 
-			struct sfs_jphys_write16 rec = {curproc->tx->tid, 					// txid
+			struct sfs_jphys_write16 rec = {curthread->tx->tid, 					// txid
 											obj2->sv_ino,						// daddr
 											obj2_inodeptr->sfi_linkcount,		// old data
 											obj2_inodeptr->sfi_linkcount - 1,	// new data
@@ -1702,7 +1702,7 @@ sfs_rename(struct vnode *absdir1, const char *name1,
 		goto out4;
 	}
 
-	struct sfs_jphys_write16 rec = {curproc->tx->tid, 					// txid
+	struct sfs_jphys_write16 rec = {curthread->tx->tid, 					// txid
 									obj1->sv_ino,						// daddr
 									obj1_inodeptr->sfi_linkcount,		// old data
 									obj1_inodeptr->sfi_linkcount + 1,	// new data
@@ -1734,14 +1734,14 @@ sfs_rename(struct vnode *absdir1, const char *name1,
 			goto recover1;
 		}
 
-		struct sfs_jphys_write16 rec = {curproc->tx->tid, 					// txid
+		struct sfs_jphys_write16 rec = {curthread->tx->tid, 					// txid
 										dir1->sv_ino,						// daddr
 										dir1_inodeptr->sfi_linkcount,		// old data
 										dir1_inodeptr->sfi_linkcount - 1,	// new data
 										(void *)&dir1_inodeptr->sfi_linkcount - (void *)dir1_inodeptr};	// offset				
 		sfs_jphys_write_with_fsdata(sfs, SFS_JPHYS_WRITE16, &rec, sizeof(rec), dir1->sv_dinobuf);
 
-		struct sfs_jphys_write16 rec2 = {curproc->tx->tid, 					// txid
+		struct sfs_jphys_write16 rec2 = {curthread->tx->tid, 					// txid
 										dir2->sv_ino,						// daddr
 										dir2_inodeptr->sfi_linkcount,		// old data
 										dir2_inodeptr->sfi_linkcount + 1,	// new data
@@ -1759,7 +1759,7 @@ sfs_rename(struct vnode *absdir1, const char *name1,
 		goto recover2;
 	}
 
-	struct sfs_jphys_write16 rec2 = {curproc->tx->tid, 					// txid
+	struct sfs_jphys_write16 rec2 = {curthread->tx->tid, 					// txid
 									obj1->sv_ino,						// daddr
 									obj1_inodeptr->sfi_linkcount,		// old data
 									obj1_inodeptr->sfi_linkcount - 1,	// new data
@@ -1782,14 +1782,14 @@ sfs_rename(struct vnode *absdir1, const char *name1,
 					   result, result2);
 			}
 
-			struct sfs_jphys_write16 rec = {curproc->tx->tid, 					// txid
+			struct sfs_jphys_write16 rec = {curthread->tx->tid, 					// txid
 											dir1->sv_ino,						// daddr
 											dir1_inodeptr->sfi_linkcount,		// old data
 											dir1_inodeptr->sfi_linkcount + 1,	// new data
 											(void *)&dir1_inodeptr->sfi_linkcount - (void *)dir1_inodeptr};	// offset				
 			sfs_jphys_write_with_fsdata(sfs, SFS_JPHYS_WRITE16, &rec, sizeof(rec), dir1->sv_dinobuf);
 
-			struct sfs_jphys_write16 rec2 = {curproc->tx->tid, 					// txid
+			struct sfs_jphys_write16 rec2 = {curthread->tx->tid, 					// txid
 											dir2->sv_ino,						// daddr
 											dir2_inodeptr->sfi_linkcount,		// old data
 											dir2_inodeptr->sfi_linkcount - 1,	// new data
@@ -1808,7 +1808,7 @@ sfs_rename(struct vnode *absdir1, const char *name1,
 				   result, result2);
 		}
 
-		struct sfs_jphys_write16 rec = {curproc->tx->tid, 						// txid
+		struct sfs_jphys_write16 rec = {curthread->tx->tid, 						// txid
 										obj1->sv_ino,							// daddr
 										obj1_inodeptr->sfi_linkcount,			// old data
 										obj1_inodeptr->sfi_linkcount - 1,		// new data

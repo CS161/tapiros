@@ -333,7 +333,7 @@ sfs_blockobj_set(struct sfs_blockobj *bo, uint32_t offset, uint32_t newval)
 		indirlevel = bo->bo_inode.i_subtree.str_indirlevel;
 		indirnum = bo->bo_inode.i_subtree.str_indirnum;
 
-		struct sfs_jphys_write32 rec = {curproc->tx->tid, 	// txid
+		struct sfs_jphys_write32 rec = {curthread->tx->tid, 	// txid
 										sv->sv_ino, 		// daddr
 										0, 					// old data (temp)
 										newval, 			// new data
@@ -394,7 +394,7 @@ sfs_blockobj_set(struct sfs_blockobj *bo, uint32_t offset, uint32_t newval)
 		idptr = buffer_map(buf);
 
 		struct sfs_data *md = buffer_get_fsdata(buf);
-		struct sfs_jphys_write32 rec = {curproc->tx->tid, 	// txid
+		struct sfs_jphys_write32 rec = {curthread->tx->tid, 	// txid
 										md->index, 			// daddr
 										idptr[offset], 		// old data
 										newval, 			// new data
@@ -898,7 +898,7 @@ sfs_discard_subtree(struct sfs_vnode *sv, uint32_t *rootptr, unsigned indir,
 					continue;
 				}
 
-				struct sfs_jphys_write32 rec = {curproc->tx->tid, 						// txid
+				struct sfs_jphys_write32 rec = {curthread->tx->tid, 						// txid
 												layers[layer].block, 					// daddr
 												layers[layer].data[layers[layer].pos], 	// old data
 												0, 										// new data
@@ -925,7 +925,7 @@ sfs_discard_subtree(struct sfs_vnode *sv, uint32_t *rootptr, unsigned indir,
 				}
 				if (indir != 1) {
 
-					struct sfs_jphys_write32 rec = {curproc->tx->tid, 				// txid
+					struct sfs_jphys_write32 rec = {curthread->tx->tid, 				// txid
 												layers[2].block, 					// daddr
 												layers[2].data[layers[2].pos], 		// old data
 												0, 									// new data
@@ -986,7 +986,7 @@ sfs_discard_subtree(struct sfs_vnode *sv, uint32_t *rootptr, unsigned indir,
 			}
 			if (indir == 3) {
 
-				struct sfs_jphys_write32 rec = {curproc->tx->tid, 					// txid
+				struct sfs_jphys_write32 rec = {curthread->tx->tid, 					// txid
 												layers[3].block, 					// daddr
 												layers[3].data[layers[3].pos], 		// old data
 												0, 									// new data
@@ -1076,7 +1076,7 @@ sfs_discard(struct sfs_vnode *sv,
 		if (i >= startfileblock && i < endfileblock && block != 0) {
 			sfs_bfree_prelocked(sfs, block);
 
-			struct sfs_jphys_write32 rec = {curproc->tx->tid, 			// txid
+			struct sfs_jphys_write32 rec = {curthread->tx->tid, 			// txid
 											sv->sv_ino, 				// daddr
 											inodeptr->sfi_direct[i],	// old data
 											0, 							// new data
@@ -1164,7 +1164,7 @@ sfs_itrunc(struct sfs_vnode *sv, off_t newlen)
 		}
 	}
 
-	struct sfs_jphys_write32 rec = {curproc->tx->tid, 			// txid
+	struct sfs_jphys_write32 rec = {curthread->tx->tid, 			// txid
 									sv->sv_ino, 				// daddr
 									inodeptr->sfi_size,			// old data
 									newlen, 					// new data

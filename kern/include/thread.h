@@ -133,6 +133,7 @@ struct thread {
 
 	/* VFS */
 	bool t_did_reserve_buffers;	/* reserve_buffers() in effect */
+	struct tx *tx;		// current transaction
 
 	/* add more here as needed */
 };

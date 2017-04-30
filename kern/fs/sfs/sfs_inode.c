@@ -245,7 +245,7 @@ sfs_reclaim(struct vnode *v)
 	iptr = sfs_dinode_map(sv);
 
 	bool nested = true;
-	if(curproc->tx == NULL) {	// don't nest transactions
+	if(curthread->tx == NULL) {	// don't nest transactions
 		sfs_txstart(sfs, SFS_JPHYS_RECLAIM);
 		nested = false;
 	}
@@ -420,7 +420,7 @@ sfs_loadvnode(struct sfs_fs *sfs, uint32_t ino, int forcetype,
 	if (forcetype != SFS_TYPE_INVAL) {
 		KASSERT(dino->sfi_type == SFS_TYPE_INVAL);
 
-		struct sfs_jphys_write16 rec = {curproc->tx->tid, 	// txid
+		struct sfs_jphys_write16 rec = {curthread->tx->tid, 	// txid
 									   	ino,				// daddr
 									  	dino->sfi_type,		// old data
 									    forcetype,			// new data

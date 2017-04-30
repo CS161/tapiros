@@ -257,7 +257,7 @@ sfs_partialio(struct sfs_vnode *sv, struct uio *uio,
 	 */
 	if (uio->uio_rw == UIO_WRITE) {
 
-		struct sfs_jphys_writeb rec = {curproc->tx->tid, 		// txid
+		struct sfs_jphys_writeb rec = {curthread->tx->tid, 		// txid
 									   sfs_checksum(ioptr), 	// checksum
 									   diskblock};				// daddr
 		sfs_jphys_write_with_fsdata(sfs, SFS_JPHYS_WRITEB, &rec, sizeof(rec), iobuffer);
@@ -333,7 +333,7 @@ sfs_blockio(struct sfs_vnode *sv, struct uio *uio)
 	}
 
 	if (uio->uio_rw == UIO_WRITE) {
-		struct sfs_jphys_writeb rec = {curproc->tx->tid, 		// txid
+		struct sfs_jphys_writeb rec = {curthread->tx->tid, 		// txid
 									   sfs_checksum(ioptr), 	// checksum
 									   diskblock};				// daddr
 		sfs_jphys_write_with_fsdata(sfs, SFS_JPHYS_WRITEB, &rec, sizeof(rec), iobuf);
@@ -455,7 +455,7 @@ sfs_io(struct sfs_vnode *sv, struct uio *uio)
 	    uio->uio_rw == UIO_WRITE &&
 	    uio->uio_offset > (off_t)inodeptr->sfi_size) {
 
-		struct sfs_jphys_write32 rec = {curproc->tx->tid, 		// txid
+		struct sfs_jphys_write32 rec = {curthread->tx->tid, 		// txid
 									   sv->sv_ino,				// daddr
 									   inodeptr->sfi_size,		// old data
 									   uio->uio_offset,			// new data
@@ -555,7 +555,7 @@ sfs_metaio(struct sfs_vnode *sv, off_t actualpos, void *data, size_t len,
 
 		for(size_t count = 0; count < len; count += WRITEM_LEN) {
 			struct sfs_jphys_writem rec; 
-			rec.tid = curproc->tx->tid;
+			rec.tid = curthread->tx->tid;
 			rec.index = diskblock;
 			rec.offset = blockoffset + count;
 			rec.len = (count + WRITEM_LEN < len) ? WRITEM_LEN : len - count;
@@ -574,7 +574,7 @@ sfs_metaio(struct sfs_vnode *sv, off_t actualpos, void *data, size_t len,
 		endpos = actualpos + len;
 		if (endpos > (off_t)dino->sfi_size) {
 
-			struct sfs_jphys_write32 rec = {curproc->tx->tid, 	// txid
+			struct sfs_jphys_write32 rec = {curthread->tx->tid, 	// txid
 									   		sv->sv_ino,			// daddr
 									  	 	dino->sfi_size,		// old data
 									   		endpos,				// new data
