@@ -768,6 +768,19 @@ sfs_domount(void *options, struct device *dev, struct fs **ret)
 
 				lock_release(sfs->sfs_freemaplock);
 
+				// zero allocated blocks
+
+				result = sfs_readblock(&sfs->sfs_absfs, rec.index, rawdata, SFS_BLOCKSIZE);
+				if(result != 0)
+					panic("couldn't read from disk at index %u\n", (unsigned) rec.index);
+
+				SAY("Zeroing out allocated block at index %u\n", (unsigned) rec.index);
+
+				bzero(rawdata, SFS_BLOCKSIZE);
+				result = sfs_writeblock(&sfs->sfs_absfs, rec.index, NULL, rawdata, SFS_BLOCKSIZE);
+				if(result != 0)
+					panic("couldn't write to disk at index %u\n", (unsigned) rec.index);
+
 				break;
 			}
 			case SFS_JPHYS_FREEB: {
@@ -935,6 +948,19 @@ sfs_domount(void *options, struct device *dev, struct fs **ret)
 					bitmap_mark(sfs->sfs_freemap, rec.index);
 					sfs->sfs_freemapdirty = true;
 				}
+
+				// zero out allocated blocks
+
+				result = sfs_readblock(&sfs->sfs_absfs, rec.index, rawdata, SFS_BLOCKSIZE);
+				if(result != 0)
+					panic("couldn't read from disk at index %u\n", (unsigned) rec.index);
+
+				SAY("Zeroing out allocated block at index %u\n", (unsigned) rec.index);
+
+				bzero(rawdata, SFS_BLOCKSIZE);
+				result = sfs_writeblock(&sfs->sfs_absfs, rec.index, NULL, rawdata, SFS_BLOCKSIZE);
+				if(result != 0)
+					panic("couldn't write to disk at index %u\n", (unsigned) rec.index);
 
 				lock_release(sfs->sfs_freemaplock);
 
