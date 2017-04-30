@@ -1022,7 +1022,6 @@ sfs_domount(void *options, struct device *dev, struct fs **ret)
 
 	SAY("\n*** Finishing loop 3 ***\n");
 
-	kfree(rawdata);
 	kfree(commits);
 
 	// Loop 4 - Backward to zero stale user data --------------------------
@@ -1044,18 +1043,16 @@ sfs_domount(void *options, struct device *dev, struct fs **ret)
 				memcpy(&rec, recptr, sizeof(rec));
 
 				if(bitmap_isset(user_blocks, rec.index)) {
-					struct buf *iobuf;
-					void *ioptr;
-
-					buffer_read(&sfs->sfs_absfs, rec.index, SFS_BLOCKSIZE, &iobuf);
-					ioptr = buffer_map(iobuf);
+					result = sfs_readblock(&sfs->sfs_absfs, rec.index, rawdata, SFS_BLOCKSIZE);
+					if(result != 0)
+						panic("couldn't read from disk at index %u\n", (unsigned) rec.index);
 
 					SAY("Zeroing out allocated block at index %u\n", (unsigned) rec.index);
 
-					bzero(ioptr, SFS_BLOCKSIZE);
-					buffer_mark_valid(iobuf);
-					buffer_mark_dirty(iobuf);
-					buffer_release(iobuf);
+					bzero(rawdata, SFS_BLOCKSIZE);
+					result = sfs_writeblock(&sfs->sfs_absfs, rec.index, NULL, rawdata, SFS_BLOCKSIZE);
+					if(result != 0)
+						panic("couldn't write to disk at index %u\n", (unsigned) rec.index);
 
 					bitmap_unmark(user_blocks, rec.index);
 				}
@@ -1067,22 +1064,20 @@ sfs_domount(void *options, struct device *dev, struct fs **ret)
 				memcpy(&rec, recptr, sizeof(rec));
 
 				if(bitmap_isset(user_blocks, rec.index)) {
-					struct buf *iobuf;
-					void *ioptr;
 
-					buffer_read(&sfs->sfs_absfs, rec.index, SFS_BLOCKSIZE, &iobuf);
-					ioptr = buffer_map(iobuf);
+					result = sfs_readblock(&sfs->sfs_absfs, rec.index, rawdata, SFS_BLOCKSIZE);
+					if(result != 0)
+						panic("couldn't read from disk at index %u\n", (unsigned) rec.index);
 
-					uint32_t disk_checksum = sfs_checksum(ioptr);
+					uint32_t disk_checksum = sfs_checksum(rawdata);
 					if(rec.checksum != disk_checksum) {				// in-place write didn't hit disk
 						SAY("Zeroing out unwritten block at index %u\n", (unsigned) rec.index);
 
-						bzero(ioptr, SFS_BLOCKSIZE);
-						buffer_mark_valid(iobuf);
-						buffer_mark_dirty(iobuf);
+						bzero(rawdata, SFS_BLOCKSIZE);
+						result = sfs_writeblock(&sfs->sfs_absfs, rec.index, NULL, rawdata, SFS_BLOCKSIZE);
+						if(result != 0)
+							panic("couldn't write to disk at index %u\n", (unsigned) rec.index);
 					}
-					buffer_release(iobuf);
-
 					bitmap_unmark(user_blocks, rec.index);
 				}
 
@@ -1098,6 +1093,7 @@ sfs_domount(void *options, struct device *dev, struct fs **ret)
    	}
 	sfs_jiter_destroy(ji);
 	
+	kfree(rawdata);
 	bitmap_destroy(user_blocks);
 
 	(void)lsn;
