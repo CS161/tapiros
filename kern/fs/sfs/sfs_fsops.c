@@ -252,7 +252,7 @@ sfs_sync(struct fs *fs)
 		return result;
 	}
 
-	sfs_checkpoint(sfs, 0);
+	sfs_checkpoint(sfs);
 
 	return 0;
 }

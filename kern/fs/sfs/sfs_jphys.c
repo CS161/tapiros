@@ -2303,15 +2303,11 @@ void sfs_txend(struct sfs_fs *sfs, uint8_t type) {
 		return;
 
 	if(count % 8 == 0)
-		sfs_checkpoint(sfs, lsn + 1);
+		sfs_checkpoint(sfs);
 }
 
-// Trim up to the specified maximum next lsn
-// Checkpointing with an lsn of 0 peeks to find the next lsn
-void sfs_checkpoint(struct sfs_fs *sfs, uint64_t lsn) {
-	if(lsn == 0) {
-		lsn = sfs_jphys_peeknextlsn(sfs);
-	}
+void sfs_checkpoint(struct sfs_fs *sfs) {
+	uint64_t lsn = sfs_jphys_peeknextlsn(sfs);
 
 	uint64_t oldlsn = (uint64_t) -1;
 	// start at the maximum, and work backwards until we find the first thing not on disk
@@ -2347,7 +2343,7 @@ void sfs_checkpoint(struct sfs_fs *sfs, uint64_t lsn) {
 		sfs_jphys_trim(sfs, oldlsn);	// trim all before that lsn
 	}
 	else {
-		sfs_jphys_trim(sfs, lsn + 1);
+		sfs_jphys_trim(sfs, lsn);
 	}
 	sfs_jphys_flushall(sfs);
 	sfs_jphys_clearodometer(sfs->sfs_jphys);

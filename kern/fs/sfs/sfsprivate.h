@@ -34,7 +34,7 @@
 struct buf; /* in buf.h */
 
 
-#define SFS_VERBOSE_RECOVERY
+//#define SFS_VERBOSE_RECOVERY
 
 
 /* Type for log sequence numbers */
@@ -168,7 +168,7 @@ void sfs_txstartcb(struct sfs_fs *sfs, sfs_lsn_t newlsn, struct sfs_jphys_writec
 void sfs_txendcb(struct sfs_fs *sfs, sfs_lsn_t newlsn, struct sfs_jphys_writecontext *ctx);
 void sfs_txstart(struct sfs_fs *sfs, uint8_t type);
 void sfs_txend(struct sfs_fs *sfs, uint8_t type);
-void sfs_checkpoint(struct sfs_fs *sfs, uint64_t lsn);
+void sfs_checkpoint(struct sfs_fs *sfs);
 void sfs_jphys_write_with_fsdata(struct sfs_fs *sfs, unsigned code, const void *rec, size_t len, struct buf *buf);
 uint32_t sfs_checksum(const char *buf);
 
