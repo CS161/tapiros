@@ -280,6 +280,14 @@ sfs_attachbuf(struct fs *fs, daddr_t diskblock, struct buf *buf)
 	md->oldlsn = 0;
 	md->newlsn = 0;
 
+	lock_acquire(sfs_data_lock);
+
+	int err = sfs_dataarray_add(sfs_datas, md, NULL);
+	if(err != 0)
+		panic("Couldn't add buffer metadata to sfs_datas\n");
+
+	lock_release(sfs_data_lock);
+
 	olddata = buffer_set_fsdata(buf, md);
 
 	/* There should have been no fs-specific buffer data beforehand. */
@@ -300,6 +308,18 @@ sfs_detachbuf(struct fs *fs, daddr_t diskblock, struct buf *buf)
 
 	/* Clear the fs-specific metadata by installing null. */
 	bufdata = buffer_set_fsdata(buf, NULL);
+
+	lock_acquire(sfs_data_lock);
+
+	unsigned n = sfs_dataarray_num(sfs_datas);
+	for(unsigned i = 0; i < n; i++) {
+		if(sfs_dataarray_get(sfs_datas, i) == bufdata) {
+			sfs_dataarray_remove(sfs_datas, i);
+			break;
+		}
+	}
+
+	lock_release(sfs_data_lock);
 
 	KASSERT(bufdata != NULL);
 	kfree(bufdata);
@@ -557,7 +577,7 @@ sfs_domount(void *options, struct device *dev, struct fs **ret)
 		return ENOMEM;
 	}
 
-	if(txs == NULL) {	// only one array for all sfs devices
+	if(txs == NULL) {	// only one tx array for all sfs devices
 		txs = txarray_create();		// create global sfs transaction struct
 		if(txs == NULL) {
 			panic("txarray_create for txs failed\n");
@@ -566,6 +586,18 @@ sfs_domount(void *options, struct device *dev, struct fs **ret)
 		tx_lock = lock_create("txs");
 		if (tx_lock==NULL) {
 			panic("sfs_mount: Could not create tx_lock\n");
+		}
+	}
+
+	if(sfs_datas == NULL) {	// only one sfs_data array for all sfs devices
+		sfs_datas = sfs_dataarray_create();		// create global sfs_data struct
+		if(txs == NULL) {
+			panic("sfs_dataarray_create for sfs_datas failed\n");
+		}
+
+		sfs_data_lock = lock_create("sfs_datas");
+		if (sfs_data_lock==NULL) {
+			panic("sfs_mount: Could not create sfs_data_lock\n");
 		}
 	}
 

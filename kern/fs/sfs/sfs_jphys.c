@@ -2301,10 +2301,14 @@ void sfs_jphys_write_with_fsdata(struct sfs_fs *sfs, unsigned code, const void *
 	else
 		md = buffer_get_fsdata(buf);
 
+	lock_acquire(sfs_data_lock);
+
 	if(md->oldlsn == 0)
 		md->oldlsn = lsn;
 	if(lsn > md->newlsn)
 		md->newlsn = lsn;
+
+	lock_release(sfs_data_lock);
 
 	if(buf != NULL)
 		buffer_set_fsdata(buf, md);

@@ -102,7 +102,7 @@ struct tx {
 #include <current.h>
 
 /*
- * Array of txs.
+ * Array of 'tx's.
  */
 #ifndef VFSINLINE
 #define VFSINLINE INLINE
@@ -113,6 +113,18 @@ DEFARRAY(tx, VFSINLINE);
 
 struct txarray *txs;			// global transaction table
 struct lock *tx_lock;	// lock to protect transaction table
+
+
+/*
+ * Array of 'sfs_data's.
+ */
+
+DECLARRAY(sfs_data, VFSINLINE);
+DEFARRAY(sfs_data, VFSINLINE);
+
+struct sfs_dataarray *sfs_datas;	// list of 'sfs_data's so we don't have to lock the buffer cache
+									// the name "datas" pains me, but it's clear
+struct lock *sfs_data_lock;			// lock to protect sfs_data list
 
 /*
  * Function for mounting a sfs (calls vfs_mount)
