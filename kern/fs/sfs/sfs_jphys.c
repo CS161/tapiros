@@ -2277,6 +2277,8 @@ void sfs_txend(struct sfs_fs *sfs, uint8_t type) {
 	uint64_t lsn = sfs_jphys_write(sfs, sfs_txendcb, NULL, SFS_JPHYS_TXEND, &rec, sizeof(rec));
 	if(lsn == 0)
 		return;
+
+	sfs_checkpoint(sfs, lsn);	// might be more performant to call this at a different interval, but this is easier
 }
 
 // Trim up to the specified maximum lsn

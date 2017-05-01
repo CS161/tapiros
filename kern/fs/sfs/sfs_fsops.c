@@ -105,8 +105,12 @@ sfs_freemapio(struct sfs_fs *sfs, enum uio_rw rw)
 						SFS_FREEMAP_START + j, &sfs->freemap_md,
 						ptr, SFS_BLOCKSIZE);
 
+			lock_acquire(sfs_data_lock);
+
 			sfs->freemap_md.oldlsn = 0;
 			sfs->freemap_md.newlsn = 0;
+
+			lock_release(sfs_data_lock);
 		}
 
 		/* If we failed, stop. */
@@ -312,12 +316,14 @@ sfs_detachbuf(struct fs *fs, daddr_t diskblock, struct buf *buf)
 	lock_acquire(sfs_data_lock);
 
 	unsigned n = sfs_dataarray_num(sfs_datas);
-	for(unsigned i = 0; i < n; i++) {
+	unsigned i;
+	for(i = 0; i < n; i++) {
 		if(sfs_dataarray_get(sfs_datas, i) == bufdata) {
 			sfs_dataarray_remove(sfs_datas, i);
 			break;
 		}
 	}
+	KASSERT(i != n); // metadata must have been in the array
 
 	lock_release(sfs_data_lock);
 
@@ -511,6 +517,14 @@ sfs_fs_create(void)
 	sfs->freemap_md.oldlsn = 0;
 	sfs->freemap_md.newlsn = 0;
 
+	lock_acquire(sfs_data_lock);
+
+	int err = sfs_dataarray_add(sfs_datas, &sfs->freemap_md, NULL);
+	if(err != 0)
+		panic("Couldn't add freemap metadata to sfs_datas\n");
+
+	lock_release(sfs_data_lock);
+
 	return sfs;
 
 cleanup_renamelock:
@@ -572,11 +586,6 @@ sfs_domount(void *options, struct device *dev, struct fs **ret)
 		return ENXIO;
 	}
 
-	sfs = sfs_fs_create();
-	if (sfs == NULL) {
-		return ENOMEM;
-	}
-
 	if(txs == NULL) {	// only one tx array for all sfs devices
 		txs = txarray_create();		// create global sfs transaction struct
 		if(txs == NULL) {
@@ -599,6 +608,11 @@ sfs_domount(void *options, struct device *dev, struct fs **ret)
 		if (sfs_data_lock==NULL) {
 			panic("sfs_mount: Could not create sfs_data_lock\n");
 		}
+	}
+
+	sfs = sfs_fs_create();
+	if (sfs == NULL) {
+		return ENOMEM;
 	}
 
 	/* Set the device so we can use sfs_readblock() */
