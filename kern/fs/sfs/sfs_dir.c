@@ -295,47 +295,84 @@ sfs_dir_unlink(struct sfs_vnode *sv, int slot)
 		nested = false;
 	}
 
-	// get purgatory directory
-	struct sfs_vnode *purgatory = sfs->purgatory;
-	lock_acquire(purgatory->sv_lock);
-
-	// find number of entries in purgatory
-	int nentries, i;
 	struct sfs_direntry tsd;
-	int err = sfs_dir_nentries(purgatory, &nentries);
-	if (err) {
-		panic("Purgatory directory doesn't have a number of entries...\n");
+
+	int err = sfs_readdir(sv, slot, &tsd);
+	if(err != 0) {
+		panic("Couldn't find file to unlink in directory\n");
 	}
 
-	// iterate over entries in purgatory and find a free slot
-	for (i = 0; i < nentries; i++) {
-		err = sfs_readdir(purgatory, i, &tsd);
-		if(err) {
-			panic("Couldn't read file from purgatory directory\n");
-		}
-		if (tsd.sfd_ino == SFS_NOINO) {	// find empty slot
-			break;
-		}
+	struct sfs_vnode *direntry; 
+	err = sfs_loadvnode(sfs, tsd.sfd_ino, SFS_TYPE_INVAL, &direntry);
+	if(err)
+		panic("Purgatory directory open failed\n");
+
+	err = sfs_dinode_load(direntry);
+	if(err) {
+		panic("Couldn't load dinode for dir unlink\n");
 	}
-	// or if no empty slots in the middle, use the next one (nentries)
 
-	err = sfs_readdir(sv, slot, &tsd);
+	struct sfs_dinode *dino = sfs_dinode_map(direntry);
 
-	struct sfs_direntry newsd;
-	newsd.sfd_ino = tsd.sfd_ino;
-	snprintf(newsd.sfd_name, SFS_NAMELEN, "%u", tsd.sfd_ino);
+	if(dino->sfi_linkcount == 1) {	// move to purgatory
+
+		// get purgatory directory
+		struct sfs_vnode *purgatory = sfs->purgatory;
+		lock_acquire(purgatory->sv_lock);
+
+		// find number of entries in purgatory
+		int nentries, i;
+		struct sfs_direntry tsd2;
+		err = sfs_dir_nentries(purgatory, &nentries);
+		if (err) {
+			panic("Purgatory directory doesn't have a number of entries...\n");
+		}
+
+		// iterate over entries in purgatory and find a free slot
+		for (i = 0; i < nentries; i++) {
+			err = sfs_readdir(purgatory, i, &tsd2);
+			if(err) {
+				panic("Couldn't read file from purgatory directory\n");
+			}
+			if (tsd2.sfd_ino == SFS_NOINO) {	// find empty slot
+				break;
+			}
+		}
+		// or if no empty slots in the middle, use the next one (nentries)
+
+		struct sfs_direntry newsd;
+		newsd.sfd_ino = tsd.sfd_ino;
+		snprintf(newsd.sfd_name, SFS_NAMELEN, "%u", tsd.sfd_ino);
+
+		err = sfs_writedir(purgatory, i, &newsd);
+		if(err != 0) {
+			panic("Couldn't write unlinked file into purgatory\n");
+		}
+
+		lock_release(purgatory->sv_lock);
+	}
 
 	struct sfs_direntry emptysd;
 	bzero(&emptysd, sizeof(emptysd));
 	emptysd.sfd_ino = SFS_NOINO;
 
-	err = sfs_writedir(purgatory, i, &newsd);
 	err = sfs_writedir(sv, slot, &emptysd);
+	dino->sfi_linkcount--;
 
-	lock_release(purgatory->sv_lock);
+	struct sfs_jphys_write16 rec = {curthread->tx->tid, 		// txid
+									tsd.sfd_ino,				// daddr
+									dino->sfi_linkcount,		// old data
+									dino->sfi_linkcount - 1,	// new data
+									(void *)&dino->sfi_linkcount - (void *)dino};	// offset				
+	sfs_jphys_write_with_fsdata(sfs, SFS_JPHYS_WRITE16, &rec, sizeof(rec), direntry->sv_dinobuf);
+
+	sfs_dinode_mark_dirty(direntry);
+	sfs_dinode_unload(direntry);
+
+	VOP_DECREF(&direntry->sv_absvn);
 	
 	if(!nested) {
-		sfs_txend(sv->sv_absvn.vn_fs->fs_data, SFS_JPHYS_DIR_UNLINK);
+		sfs_txend(sfs, SFS_JPHYS_DIR_UNLINK);
 	}
 
 	return err;

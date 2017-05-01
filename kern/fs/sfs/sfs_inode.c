@@ -203,7 +203,13 @@ sfs_reclaim(struct vnode *v)
 		reserve_buffers(SFS_BLOCKSIZE);
 	}
 
-	lock_acquire(sv->sv_lock);
+	struct sfs_vnode *purgatory = sfs->purgatory;
+
+	if(purgatory != sv)
+		lock_acquire(sv->sv_lock);
+
+	lock_acquire(purgatory->sv_lock);
+
 	lock_acquire(sfs->sfs_vnlock);
 
 	/*
@@ -220,7 +226,11 @@ sfs_reclaim(struct vnode *v)
 
 		spinlock_release(&v->vn_countlock);
 		lock_release(sfs->sfs_vnlock);
-		lock_release(sv->sv_lock);
+		lock_release(purgatory->sv_lock);
+
+		if(purgatory != sv)
+			lock_release(sv->sv_lock);
+
 		if (buffers_needed) {
 			unreserve_buffers(SFS_BLOCKSIZE);
 		}
@@ -236,7 +246,11 @@ sfs_reclaim(struct vnode *v)
 		 * there's essentially no helping it...
 		 */
 		lock_release(sfs->sfs_vnlock);
-		lock_release(sv->sv_lock);
+		lock_release(purgatory->sv_lock);
+
+		if(purgatory != sv)
+			lock_release(sv->sv_lock);
+
 		if (buffers_needed) {
 			unreserve_buffers(SFS_BLOCKSIZE);
 		}
@@ -252,13 +266,18 @@ sfs_reclaim(struct vnode *v)
 
 	/* If there are no on-disk references to the file either, erase it. */
 	if (iptr->sfi_linkcount == 0) {
+		KASSERT(sv != purgatory);
+
 		sfs_lock_freemap(sfs);
 		result = sfs_itrunc(sv, 0);
 		if (result) {
 			sfs_dinode_unload(sv);
 			sfs_unlock_freemap(sfs);
 			lock_release(sfs->sfs_vnlock);
-			lock_release(sv->sv_lock);
+			lock_release(purgatory->sv_lock);
+
+			if(sv != purgatory)
+				lock_release(sv->sv_lock);
 
 			if(!nested) {
 				sfs_txend(sfs, SFS_JPHYS_RECLAIM);
@@ -274,13 +293,9 @@ sfs_reclaim(struct vnode *v)
 		buffer_drop(&sfs->sfs_absfs, sv->sv_ino, SFS_BLOCKSIZE);
 		sfs_bfree_prelocked(sfs, sv->sv_ino);
 
-		struct sfs_vnode *purgatory = sfs->purgatory;
-
 		struct sfs_direntry emptysd;
 		bzero(&emptysd, sizeof(emptysd));
 		emptysd.sfd_ino = SFS_NOINO;
-
-		lock_acquire(purgatory->sv_lock);
 
 		int slot;
 		int err = sfs_dir_findino(purgatory, sv->sv_ino, NULL, &slot);
@@ -290,8 +305,6 @@ sfs_reclaim(struct vnode *v)
 		err = sfs_writedir(purgatory, slot, &emptysd);
 		if(err) 
 			panic("writedir in reclaim failed\n");
-
-		lock_release(purgatory->sv_lock);
 
 		sfs_unlock_freemap(sfs);
 	}
@@ -326,7 +339,10 @@ sfs_reclaim(struct vnode *v)
 	vnode_cleanup(&sv->sv_absvn);
 
 	lock_release(sfs->sfs_vnlock);
-	lock_release(sv->sv_lock);
+	lock_release(purgatory->sv_lock);
+
+	if(purgatory != sv)
+		lock_release(sv->sv_lock);
 
 	sfs_vnode_destroy(sv);
 
