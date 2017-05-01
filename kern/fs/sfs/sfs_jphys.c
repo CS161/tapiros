@@ -2278,12 +2278,6 @@ void sfs_txendcb(struct sfs_fs *sfs, sfs_lsn_t newlsn, struct sfs_jphys_writecon
 
 // *** Transactions cannot be nested. Enforce in the calling function.
 void sfs_txstart(struct sfs_fs *sfs, uint8_t type) {
-	static uint64_t count = 0;
-	count++;
-
-	if(count % 4 == 0)
-		sfs_sync_freemap(sfs);
-
 	struct sfs_jphys_tx rec = {0, type};
 	uint64_t lsn = sfs_jphys_write(sfs, sfs_txstartcb, NULL, SFS_JPHYS_TXSTART, &rec, sizeof(rec));
 	(void) lsn;
@@ -2294,7 +2288,7 @@ void sfs_txend(struct sfs_fs *sfs, uint8_t type) {
 	static uint64_t count = 0;
 	count++;
 
-	if(count % 4 == 0)
+	if(count % 4 == 0)			// this could be tuned much more, but whatever
 		sfs_sync_freemap(sfs);
 
 	struct sfs_jphys_tx rec = {curthread->tx->tid, type};
@@ -2302,7 +2296,7 @@ void sfs_txend(struct sfs_fs *sfs, uint8_t type) {
 	if(lsn == 0)
 		return;
 
-	if(count % 8 == 0)
+	if(count % 4 == 0)
 		sfs_checkpoint(sfs);
 }
 

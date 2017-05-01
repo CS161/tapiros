@@ -60,6 +60,11 @@ sfs_clearblock(struct sfs_fs *sfs, daddr_t block, struct buf **bufret)
 
 	ptr = buffer_map(buf);
 	bzero(ptr, SFS_BLOCKSIZE);
+
+	struct sfs_jphys_block rec = {curthread->tx->tid, 	// txid
+								  block};				// daddr
+	sfs_jphys_write_with_fsdata(sfs, SFS_JPHYS_ALLOCB, &rec, sizeof(rec), buf);
+
 	buffer_mark_valid(buf);
 	buffer_mark_dirty(buf);
 
@@ -94,10 +99,6 @@ sfs_balloc(struct sfs_fs *sfs, daddr_t *diskblock, struct buf **bufret)
 		lock_release(sfs->sfs_freemaplock);
 		return result;
 	}
-
-	struct sfs_jphys_block rec = {curthread->tx->tid, 	// txid
-								  *diskblock};			// daddr
-	sfs_jphys_write_with_fsdata(sfs, SFS_JPHYS_ALLOCB, &rec, sizeof(rec), NULL);
 
 	sfs->sfs_freemapdirty = true;
 
