@@ -2335,11 +2335,12 @@ void sfs_checkpoint(struct sfs_fs *sfs) {
 
 	if(oldlsn != (uint64_t) -1) {
 		sfs_jphys_trim(sfs, oldlsn);	// trim all before that lsn
+		sfs_jphys_flush(sfs, oldlsn);
 	}
 	else {
 		sfs_jphys_trim(sfs, lsn);
+		sfs_jphys_flush(sfs, lsn);
 	}
-	sfs_jphys_flushall(sfs);
 	sfs_jphys_clearodometer(sfs->sfs_jphys);
 }
 
@@ -2351,6 +2352,9 @@ void sfs_jphys_write_with_fsdata(struct sfs_fs *sfs, unsigned code, const void *
 		return;
 	
 	struct sfs_data *md;
+
+	start:
+	
 	if(buf == NULL)
 		md = &sfs->freemap_md;
 	else
@@ -2369,6 +2373,11 @@ void sfs_jphys_write_with_fsdata(struct sfs_fs *sfs, unsigned code, const void *
 
 	if(buf != NULL)
 		buffer_set_fsdata(buf, md);
+
+	if(code == SFS_JPHYS_ALLOCB && buf != NULL) {
+		buf = NULL;
+		goto start;	// allocation metadata must be reflected in both the freemap and the zeroed buffer
+	}
 }
 
 #define ADLER_MAGIC 65521

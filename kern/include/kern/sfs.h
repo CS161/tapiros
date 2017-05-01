@@ -227,14 +227,5 @@ struct sfs_jphys_writem {
 	char new[WRITEM_LEN];			// new metadata chunk
 };
 
-/* Contents for SFS_JPHYS_WRITEDIR */
-struct sfs_jphys_writedir {
-	uint64_t tid;					// transaction id
-	daddr_t index;					// disk address
-	uint32_t slot;					// slot in directory
-	struct sfs_direntry old;		// old directory entry
-	struct sfs_direntry new;		// new directory entry
-};
-
 
 #endif /* _KERN_SFS_H_ */

@@ -766,6 +766,7 @@ sfs_domount(void *options, struct device *dev, struct fs **ret)
 
 	char *rawdata = kmalloc(SFS_BLOCKSIZE);
 	uint64_t *commits = kmalloc(sizeof(uint64_t) * ncommits);
+	bzero(commits, sizeof(uint64_t) * ncommits);
 	size_t txi = 0;
 
 	SAY("*** Starting loop 2 ***\n\n");
