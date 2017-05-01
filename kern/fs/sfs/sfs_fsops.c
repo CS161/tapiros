@@ -770,6 +770,11 @@ sfs_domount(void *options, struct device *dev, struct fs **ret)
 
 				// zero allocated blocks
 
+				if(bitmap_isset(user_blocks, rec.index)) {
+					SAY("Skipping zero because %u will end up being a user block\n", (unsigned) rec.index);
+					break;
+				}
+
 				result = sfs_readblock(&sfs->sfs_absfs, rec.index, rawdata, SFS_BLOCKSIZE);
 				if(result != 0)
 					panic("couldn't read from disk at index %u\n", (unsigned) rec.index);
@@ -949,7 +954,7 @@ sfs_domount(void *options, struct device *dev, struct fs **ret)
 					sfs->sfs_freemapdirty = true;
 				}
 
-				// zero out allocated blocks
+				/*// zero out allocated blocks
 
 				result = sfs_readblock(&sfs->sfs_absfs, rec.index, rawdata, SFS_BLOCKSIZE);
 				if(result != 0)
@@ -961,7 +966,8 @@ sfs_domount(void *options, struct device *dev, struct fs **ret)
 				result = sfs_writeblock(&sfs->sfs_absfs, rec.index, NULL, rawdata, SFS_BLOCKSIZE);
 				if(result != 0)
 					panic("couldn't write to disk at index %u\n", (unsigned) rec.index);
-
+				*/
+	
 				lock_release(sfs->sfs_freemaplock);
 
 				break;
