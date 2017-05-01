@@ -2233,6 +2233,7 @@ sfs_jphys_stopwriting(struct sfs_fs *sfs)
 	lock_release(jp->jp_lock);
 }
 
+// start callback function to add to the tx array
 void sfs_txstartcb(struct sfs_fs *sfs, sfs_lsn_t newlsn, struct sfs_jphys_writecontext *ctx) {
 	(void) ctx;
 
@@ -2250,6 +2251,7 @@ void sfs_txstartcb(struct sfs_fs *sfs, sfs_lsn_t newlsn, struct sfs_jphys_writec
 	return;
 }
 
+// end callback function to remove from the tx array
 void sfs_txendcb(struct sfs_fs *sfs, sfs_lsn_t newlsn, struct sfs_jphys_writecontext *ctx) {
 	(void) ctx;
 	(void) sfs;
@@ -2300,6 +2302,7 @@ void sfs_txend(struct sfs_fs *sfs, uint8_t type) {
 		sfs_checkpoint(sfs);
 }
 
+// perform a rolling checkpoint
 void sfs_checkpoint(struct sfs_fs *sfs) {
 	uint64_t lsn = sfs_jphys_peeknextlsn(sfs);
 
@@ -2341,7 +2344,7 @@ void sfs_checkpoint(struct sfs_fs *sfs) {
 		sfs_jphys_trim(sfs, lsn);
 		sfs_jphys_flush(sfs, lsn);
 	}
-	sfs_jphys_clearodometer(sfs->sfs_jphys);
+	sfs_jphys_clearodometer(sfs->sfs_jphys);	// I don't use this elsewhere, but I'll update it just in case
 }
 
 // NULL buf pointer means the freemap was modified, otherwise it's a normal buf
