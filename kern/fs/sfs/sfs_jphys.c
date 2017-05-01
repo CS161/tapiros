@@ -2239,7 +2239,6 @@ void sfs_txstartcb(struct sfs_fs *sfs, sfs_lsn_t newlsn, struct sfs_jphys_writec
 	struct tx *tx = kmalloc(sizeof(struct tx));
 	tx->sfs = sfs;
 	tx->tid = newlsn;
-	tx->txend = false;
 
 	lock_acquire(tx_lock);
 	int err = txarray_add(txs, tx, NULL);
@@ -2257,8 +2256,21 @@ void sfs_txendcb(struct sfs_fs *sfs, sfs_lsn_t newlsn, struct sfs_jphys_writecon
 	(void) newlsn;
 
 	lock_acquire(tx_lock);
+
 	curthread->tx->tid = newlsn;
-	curthread->tx->txend = true;
+	unsigned n = txarray_num(txs);
+	unsigned i;
+	for(i = 0; i < n; i++) {
+		struct tx *tx = txarray_get(txs, i);
+		KASSERT(tx != NULL);
+
+		if(tx == curthread->tx) {
+			kfree(tx);
+			txarray_remove(txs, i);
+			break;
+		}
+	}
+
 	lock_release(tx_lock);
 
 	curthread->tx = NULL;
@@ -2278,7 +2290,7 @@ void sfs_txend(struct sfs_fs *sfs, uint8_t type) {
 	if(lsn == 0)
 		return;
 
-	sfs_checkpoint(sfs, lsn);	// might be more performant to call this at a different interval, but this is easier
+	sfs_checkpoint(sfs, lsn + 1);	// might be more performant to call this at a different interval, but this is easier
 }
 
 // Trim up to the specified maximum lsn
@@ -2287,7 +2299,51 @@ void sfs_txend(struct sfs_fs *sfs, uint8_t type) {
 void sfs_checkpoint(struct sfs_fs *sfs, uint64_t lsn) {
 	if(lsn == 0) {
 		FSOP_SYNC(&sfs->sfs_absfs);
+		lsn = sfs_jphys_peeknextlsn(sfs);
 	}
+
+	uint64_t oldlsn = (uint64_t) -1;
+	// start at the maximum, and work backwards until we find the first thing not on disk
+
+	lock_acquire(tx_lock);
+
+	unsigned n = txarray_num(txs);			// find earliest uncommitted transaction
+	unsigned i;
+	for(i = 0; i < n; i++) {
+		struct tx *tx = txarray_get(txs, i);
+		KASSERT(tx != NULL);
+
+		if(tx->sfs == sfs && tx->tid < oldlsn) {
+			oldlsn = tx->tid;
+		}
+	}
+
+	lock_release(tx_lock);
+
+	lock_acquire(sfs_data_lock);
+
+	n = sfs_dataarray_num(sfs_datas);
+	for(i = 0; i < n; i++) {			// find oldest lsn not reflected on disk (freemap metadata is in here too)
+		struct sfs_data *md = sfs_dataarray_get(sfs_datas, i);
+		KASSERT(md != NULL);
+
+		if(md->sfs == sfs && md->oldlsn != 0 && md->oldlsn < oldlsn)
+			oldlsn = md->oldlsn;
+	}
+
+	kprintf("oldlsn: %llu\n",oldlsn);
+	kprintf("freemap_md: %llu\n", sfs->freemap_md.oldlsn);
+
+	lock_release(sfs_data_lock);
+
+	if(oldlsn != (uint64_t) -1) {
+		sfs_jphys_trim(sfs, oldlsn);	// trim all before that lsn
+	}
+	else {
+		sfs_jphys_trim(sfs, lsn + 1);
+	}
+	sfs_jphys_flushall(sfs);
+	sfs_jphys_clearodometer(sfs->sfs_jphys);	// currently unused, but just in case I change my mind
 }
 
 // NULL buf pointer means the freemap was modified, otherwise it's a normal buf
@@ -2303,14 +2359,16 @@ void sfs_jphys_write_with_fsdata(struct sfs_fs *sfs, unsigned code, const void *
 	else
 		md = buffer_get_fsdata(buf);
 
-	lock_acquire(sfs_data_lock);
-
-	if(md->oldlsn == 0)
+	if(md->oldlsn == 0) {
+		lock_acquire(sfs_data_lock);
 		md->oldlsn = lsn;
+		lock_release(sfs_data_lock);
+	}
+
+	// This doesn't need to be protected by sfs_data lock because sfs_datas doesn't use newlsn,
+	// and we own the buffer it's attached to.
 	if(lsn > md->newlsn)
 		md->newlsn = lsn;
-
-	lock_release(sfs_data_lock);
 
 	if(buf != NULL)
 		buffer_set_fsdata(buf, md);

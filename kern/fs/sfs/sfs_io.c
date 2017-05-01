@@ -161,14 +161,24 @@ sfs_writeblock(struct fs *fs, daddr_t block, void *fsbufdata,
 		}
 	}
 	else if(md != NULL) {
-		if(md->newlsn > 0)
+		if(md->newlsn > 0) {
 			sfs_jphys_flush(sfs, md->newlsn);
+		}
 	}
 
 	SFSUIO(&iov, &ku, data, block, UIO_WRITE);
 	result = sfs_rwblock(sfs, &ku);
 	if (result) {
 		return result;
+	}
+
+	if(md != NULL) {
+		lock_acquire(sfs_data_lock);
+
+		md->oldlsn = 0;
+		md->newlsn = 0;
+
+		lock_release(sfs_data_lock);
 	}
 
 	if (isjournal) {

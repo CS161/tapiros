@@ -94,7 +94,6 @@ struct sfs_fs {
 struct tx {
 	struct sfs_fs *sfs;	// associated file system
 	uint64_t tid;		// transaction id
-	bool txend;			// true if TXEND has been issued
 };
 
 #include <array.h>
