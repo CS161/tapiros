@@ -2278,6 +2278,12 @@ void sfs_txendcb(struct sfs_fs *sfs, sfs_lsn_t newlsn, struct sfs_jphys_writecon
 
 // *** Transactions cannot be nested. Enforce in the calling function.
 void sfs_txstart(struct sfs_fs *sfs, uint8_t type) {
+	static uint64_t count = 0;
+	count++;
+
+	if(count % 4 == 0)
+		sfs_sync_freemap(sfs);
+
 	struct sfs_jphys_tx rec = {0, type};
 	uint64_t lsn = sfs_jphys_write(sfs, sfs_txstartcb, NULL, SFS_JPHYS_TXSTART, &rec, sizeof(rec));
 	(void) lsn;
@@ -2285,20 +2291,25 @@ void sfs_txstart(struct sfs_fs *sfs, uint8_t type) {
 
 // *** Transactions cannot be nested. Enforce in the calling function.
 void sfs_txend(struct sfs_fs *sfs, uint8_t type) {
+	static uint64_t count = 0;
+	count++;
+
+	if(count % 4 == 0)
+		sfs_sync_freemap(sfs);
+
 	struct sfs_jphys_tx rec = {curthread->tx->tid, type};
 	uint64_t lsn = sfs_jphys_write(sfs, sfs_txendcb, NULL, SFS_JPHYS_TXEND, &rec, sizeof(rec));
 	if(lsn == 0)
 		return;
 
-	sfs_checkpoint(sfs, lsn + 1);	// might be more performant to call this at a different interval, but this is easier
+	if(count % 8 == 0)
+		sfs_checkpoint(sfs, lsn + 1);
 }
 
-// Trim up to the specified maximum lsn
-// Checkpointing with an lsn of 0 syncs all data to disk, then clears the journal (and flushes that to disk);
-// this is only intended to be used during mount/unmount
+// Trim up to the specified maximum next lsn
+// Checkpointing with an lsn of 0 peeks to find the next lsn
 void sfs_checkpoint(struct sfs_fs *sfs, uint64_t lsn) {
 	if(lsn == 0) {
-		FSOP_SYNC(&sfs->sfs_absfs);
 		lsn = sfs_jphys_peeknextlsn(sfs);
 	}
 
@@ -2319,7 +2330,6 @@ void sfs_checkpoint(struct sfs_fs *sfs, uint64_t lsn) {
 	}
 
 	lock_release(tx_lock);
-
 	lock_acquire(sfs_data_lock);
 
 	n = sfs_dataarray_num(sfs_datas);
@@ -2331,9 +2341,6 @@ void sfs_checkpoint(struct sfs_fs *sfs, uint64_t lsn) {
 			oldlsn = md->oldlsn;
 	}
 
-	kprintf("oldlsn: %llu\n",oldlsn);
-	kprintf("freemap_md: %llu\n", sfs->freemap_md.oldlsn);
-
 	lock_release(sfs_data_lock);
 
 	if(oldlsn != (uint64_t) -1) {
@@ -2343,7 +2350,7 @@ void sfs_checkpoint(struct sfs_fs *sfs, uint64_t lsn) {
 		sfs_jphys_trim(sfs, lsn + 1);
 	}
 	sfs_jphys_flushall(sfs);
-	sfs_jphys_clearodometer(sfs->sfs_jphys);	// currently unused, but just in case I change my mind
+	sfs_jphys_clearodometer(sfs->sfs_jphys);
 }
 
 // NULL buf pointer means the freemap was modified, otherwise it's a normal buf

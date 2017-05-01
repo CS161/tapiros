@@ -34,7 +34,7 @@
 struct buf; /* in buf.h */
 
 
-//#define SFS_VERBOSE_RECOVERY
+#define SFS_VERBOSE_RECOVERY
 
 
 /* Type for log sequence numbers */
@@ -112,6 +112,9 @@ int sfs_writeblock(struct fs *fs, daddr_t block, void *fsbufdata,
 int sfs_io(struct sfs_vnode *sv, struct uio *uio);
 int sfs_metaio(struct sfs_vnode *sv, off_t pos, void *data, size_t len,
 	       enum uio_rw rw);
+
+/* Functions in sfs_fsops.c needed elsewhere */
+int sfs_sync_freemap(struct sfs_fs *sfs);
 
 /* Function used by sfs_jphys.c - you write this */
 /* XXX: there should be a template; but we don't ship the file it belongs in */

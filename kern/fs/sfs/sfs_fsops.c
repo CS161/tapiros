@@ -104,13 +104,6 @@ sfs_freemapio(struct sfs_fs *sfs, enum uio_rw rw)
 			result = sfs_writeblock(&sfs->sfs_absfs,
 						SFS_FREEMAP_START + j, &sfs->freemap_md,
 						ptr, SFS_BLOCKSIZE);
-
-			lock_acquire(sfs_data_lock);
-
-			sfs->freemap_md.oldlsn = 0;
-			sfs->freemap_md.newlsn = 0;
-
-			lock_release(sfs_data_lock);
 		}
 
 		/* If we failed, stop. */
@@ -145,7 +138,6 @@ sfs_sync_vnodes(struct sfs_fs *sfs)
 /*
  * Sync routine for the freemap.
  */
-static
 int
 sfs_sync_freemap(struct sfs_fs *sfs)
 {
@@ -259,6 +251,8 @@ sfs_sync(struct fs *fs)
 	if (result) {
 		return result;
 	}
+
+	sfs_checkpoint(sfs, 0);
 
 	return 0;
 }
@@ -398,7 +392,8 @@ sfs_unmount(struct fs *fs)
 	lock_release(sfs->sfs_freemaplock);
 
 	VOP_DECREF(&sfs->purgatory->sv_absvn);
-	sfs_checkpoint(sfs, 0);
+
+	FSOP_SYNC(&sfs->sfs_absfs);	// implicitly checkpoints
 
 	lock_acquire(sfs->sfs_vnlock);
 	lock_acquire(sfs->sfs_freemaplock);
@@ -1183,7 +1178,7 @@ sfs_domount(void *options, struct device *dev, struct fs **ret)
 		return result;
 	}
 
-	sfs_checkpoint(sfs, 0);	// ensure all recovery is reflected on disk, then clear the journal
+	FSOP_SYNC(&sfs->sfs_absfs);	// ensure all recovery is reflected on disk, then clear the journal
 
 	reserve_buffers(SFS_BLOCKSIZE);
 
@@ -1239,7 +1234,7 @@ sfs_domount(void *options, struct device *dev, struct fs **ret)
 		VOP_DECREF(&direntry->sv_absvn);
 	}
 
-	sfs_checkpoint(sfs, 0);
+	FSOP_SYNC(&sfs->sfs_absfs);	// implicitly checkpoints
 
 	SAY("*** Done emptying purgatory ***\n");
 
