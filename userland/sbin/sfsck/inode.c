@@ -247,7 +247,9 @@ inode_adjust_filelinks(void)
 		assert(inodes[i].type == SFS_TYPE_FILE);
 
 		/* because we've seen it, there must be at least one link */
-		assert(inodes[i].linkcount > 0);
+		/* (unless it's in purgatory, then it can have 0) */
+		// gcc complains that it's always true now, so I'll comment it out
+		// assert(inodes[i].linkcount >= 0);
 
 		sfs_readinode(inodes[i].ino, &sfi);
 		assert(sfi.sfi_type == SFS_TYPE_FILE);

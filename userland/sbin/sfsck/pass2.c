@@ -254,8 +254,7 @@ pass2_dir(uint32_t ino, uint32_t parentino, const char *pathsofar)
 
 			switch (subsfi.sfi_type) {
 			    case SFS_TYPE_FILE:
-				if(i != SFS_PURGDIR_INO)
-					inode_addlink(direntries[i].sfd_ino);
+				inode_addlink(direntries[i].sfd_ino);
 				break;
 			    case SFS_TYPE_DIR:
 				if (pass2_dir(direntries[i].sfd_ino,
@@ -323,5 +322,4 @@ pass2(void)
 
 	snprintf(path, sizeof(path), "%s:", sb_volname());
 	pass2_dir(SFS_ROOTDIR_INO, SFS_ROOTDIR_INO, path);
-	pass2_dir(SFS_PURGDIR_INO, SFS_PURGDIR_INO, path);
 }
