@@ -254,7 +254,8 @@ pass2_dir(uint32_t ino, uint32_t parentino, const char *pathsofar)
 
 			switch (subsfi.sfi_type) {
 			    case SFS_TYPE_FILE:
-				inode_addlink(direntries[i].sfd_ino);
+				if(i != SFS_PURGDIR_INO)
+					inode_addlink(direntries[i].sfd_ino);
 				break;
 			    case SFS_TYPE_DIR:
 				if (pass2_dir(direntries[i].sfd_ino,
