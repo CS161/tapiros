@@ -1057,6 +1057,8 @@ sfs_rmdir(struct vnode *v, const char *name)
 	sfs_dinode_mark_dirty(sv);
 
 	victim_inodeptr->sfi_linkcount--;
+	KASSERT(victim_inodeptr->sfi_linkcount != 0);
+
 	sfs_dinode_mark_dirty(victim);
 
 	result = sfs_dir_unlink(sv, slot);
@@ -1618,6 +1620,9 @@ sfs_rename(struct vnode *absdir1, const char *name1,
 
 			dir2_inodeptr->sfi_linkcount--;
 			obj2_inodeptr->sfi_linkcount--;
+
+			KASSERT(obj2_inodeptr->sfi_linkcount != 0);
+
 			sfs_dinode_mark_dirty(dir2);
 			sfs_dinode_mark_dirty(obj2);
 

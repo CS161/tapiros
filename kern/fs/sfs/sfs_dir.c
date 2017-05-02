@@ -356,15 +356,15 @@ sfs_dir_unlink(struct sfs_vnode *sv, int slot)
 	bzero(&emptysd, sizeof(emptysd));
 	emptysd.sfd_ino = SFS_NOINO;
 
-	err = sfs_writedir(sv, slot, &emptysd);
-	dino->sfi_linkcount--;
-
 	struct sfs_jphys_write16 rec = {curthread->tx->tid, 		// txid
 									tsd.sfd_ino,				// daddr
 									dino->sfi_linkcount,		// old data
 									dino->sfi_linkcount - 1,	// new data
 									(void *)&dino->sfi_linkcount - (void *)dino};	// offset				
 	sfs_jphys_write_with_fsdata(sfs, SFS_JPHYS_WRITE16, &rec, sizeof(rec), direntry->sv_dinobuf);
+
+	err = sfs_writedir(sv, slot, &emptysd);
+	dino->sfi_linkcount--;
 
 	sfs_dinode_mark_dirty(direntry);
 	sfs_dinode_unload(direntry);
