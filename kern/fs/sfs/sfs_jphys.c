@@ -2304,8 +2304,6 @@ void sfs_txend(struct sfs_fs *sfs, uint8_t type) {
 
 // perform a rolling checkpoint
 void sfs_checkpoint(struct sfs_fs *sfs) {
-	(void) sfs;
-	/*
 	uint64_t lsn = sfs_jphys_peeknextlsn(sfs);
 	uint64_t oldlsn = (uint64_t) -1;
 	// start at the maximum, and work backwards until we find the first thing not on disk
@@ -2345,7 +2343,7 @@ void sfs_checkpoint(struct sfs_fs *sfs) {
 		sfs_jphys_trim(sfs, lsn);
 		sfs_jphys_flush(sfs, lsn);
 	}
-	sfs_jphys_clearodometer(sfs->sfs_jphys);	// I don't use this elsewhere, but I'll update it just in case*/
+	sfs_jphys_clearodometer(sfs->sfs_jphys);	// I don't use this elsewhere, but I'll update it just in case
 }
 
 // NULL buf pointer means the freemap was modified, otherwise it's a normal buf
