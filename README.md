@@ -1,5 +1,5 @@
 # tapiros
-fork of OS/161 from Harvard CS161 in spring 2017
+fork of OS/161 for Harvard CS161 in spring 2017
 
 ```
  _____           _       ___  ____
